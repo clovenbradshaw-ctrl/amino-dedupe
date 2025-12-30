@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { AirtableClient } from '../lib/airtable.js';
 import { findDuplicateCandidates, groupCandidates, MATCH_TIERS } from '../lib/matching.js';
 
@@ -7,6 +7,7 @@ const RECORDS_PER_PAGE = 300;
 /**
  * ScanResults Component
  * Displays duplicate candidates found by the matching engine.
+ * Supports progressive loading - shows records as they stream in.
  */
 export default function ScanResults({
   credentials,
@@ -19,7 +20,7 @@ export default function ScanResults({
   const [records, setRecords] = useState([]);
   const [candidates, setCandidates] = useState([]);
   const [groups, setGroups] = useState([]);
-  const [progress, setProgress] = useState({ phase: '', current: 0, total: 0 });
+  const [progress, setProgress] = useState({ phase: '', current: 0, total: 0, hasMore: false, delay: 200 });
 
   // Pagination
   const [visibleCount, setVisibleCount] = useState(RECORDS_PER_PAGE);
@@ -30,6 +31,9 @@ export default function ScanResults({
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState('confidence'); // confidence, tier, name
 
+  // Ref for stable callback
+  const recordsRef = useRef([]);
+
   const log = (message, type = 'info') => {
     if (onLog) onLog(message, type);
   };
@@ -37,35 +41,47 @@ export default function ScanResults({
   const runScan = async () => {
     setLoading(true);
     setVisibleCount(RECORDS_PER_PAGE); // Reset pagination
-    setProgress({ phase: 'Fetching records', current: 0, total: 0 });
+    setProgress({ phase: 'Fetching records', current: 0, total: 0, hasMore: true, delay: 200 });
+    setRecords([]);
+    setCandidates([]);
+    setGroups([]);
+    recordsRef.current = [];
 
     try {
       const client = new AirtableClient(credentials.apiKey, credentials.baseId);
 
-      // Fetch all records
+      // Fetch all records with streaming - records appear as they're fetched
       log('Fetching all records...', 'info');
       const allRecords = await client.getAllRecords(credentials.tableName, {
+        onRecords: (newRecords, allSoFar) => {
+          // Update records progressively as they stream in
+          recordsRef.current = allSoFar;
+          setRecords([...allSoFar]);
+        },
         onProgress: (p) => {
           setProgress({
             phase: 'Fetching records',
             current: p.total,
-            total: p.hasMore ? '...' : p.total,
+            total: p.hasMore ? null : p.total,
+            hasMore: p.hasMore,
+            delay: p.delay,
           });
         },
       });
 
-      setRecords(allRecords);
       log(`Fetched ${allRecords.length} records`, 'success');
 
       // Find duplicate candidates
       log('Analyzing for duplicates...', 'info');
-      setProgress({ phase: 'Finding duplicates', current: 0, total: allRecords.length });
+      setProgress({ phase: 'Finding duplicates', current: 0, total: allRecords.length, hasMore: false, delay: 200 });
 
       const duplicateCandidates = findDuplicateCandidates(allRecords, fieldConfig, (p) => {
         setProgress({
           phase: p.phase === 'matching' ? 'Comparing records' : 'Fuzzy matching',
           current: p.current,
           total: p.total,
+          hasMore: false,
+          delay: 200,
         });
       });
 
@@ -201,7 +217,7 @@ export default function ScanResults({
             <p className="loading-phase">{progress.phase}</p>
             <div className="progress-bar">
               <div
-                className="progress-fill"
+                className={`progress-fill ${progress.hasMore ? 'streaming' : ''}`}
                 style={{
                   width: progress.total && typeof progress.total === 'number'
                     ? `${(progress.current / progress.total) * 100}%`
@@ -210,8 +226,43 @@ export default function ScanResults({
               />
             </div>
             <p className="progress-text">
-              {progress.current.toLocaleString()} / {typeof progress.total === 'number' ? progress.total.toLocaleString() : progress.total}
+              {progress.current.toLocaleString()}
+              {progress.total !== null ? ` / ${progress.total.toLocaleString()}` : ' records loaded'}
+              {progress.hasMore && ' (fetching more...)'}
             </p>
+            {progress.delay > 200 && (
+              <p className="rate-limit-notice">
+                Rate limit adjusted: {progress.delay}ms delay
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Streaming records preview during load */}
+      {loading && records.length > 0 && progress.phase === 'Fetching records' && (
+        <div className="streaming-preview">
+          <div className="streaming-header">
+            <span className="streaming-count">{records.length.toLocaleString()} records loaded</span>
+            <span className="streaming-indicator">
+              <span className="pulse-dot"></span>
+              Loading...
+            </span>
+          </div>
+          <div className="streaming-sample">
+            {records.slice(-5).map(record => (
+              <div key={record.id} className="streaming-record">
+                <span className="record-id">{record.id}</span>
+                <span className="record-preview">
+                  {Object.values(record.fields).slice(0, 2).map((val, i) => (
+                    <span key={i} className="field-value">
+                      {typeof val === 'string' ? val.substring(0, 30) : JSON.stringify(val).substring(0, 30)}
+                      {(typeof val === 'string' && val.length > 30) ? '...' : ''}
+                    </span>
+                  ))}
+                </span>
+              </div>
+            ))}
           </div>
         </div>
       )}

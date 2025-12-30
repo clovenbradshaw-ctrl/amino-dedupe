@@ -1,7 +1,14 @@
 /**
  * Airtable API Client
  * Handles all communication with the Airtable API including schema introspection.
+ * Implements intelligent rate limiting with exponential backoff.
  */
+
+// Rate limiting constants
+const INITIAL_DELAY_MS = 200; // Base delay between requests (5 req/sec)
+const MAX_RETRIES = 5;
+const INITIAL_BACKOFF_MS = 1000;
+const MAX_BACKOFF_MS = 32000;
 
 export class AirtableClient {
   constructor(apiKey, baseId) {
@@ -10,24 +17,81 @@ export class AirtableClient {
     this.baseUrl = `https://api.airtable.com/v0/${baseId}`;
     this.metaUrl = `https://api.airtable.com/v0/meta/bases/${baseId}/tables`;
     this.schema = null;
+    this.currentDelay = INITIAL_DELAY_MS;
   }
 
-  async request(url, options = {}) {
-    const response = await fetch(url, {
-      ...options,
-      headers: {
-        'Authorization': `Bearer ${this.apiKey}`,
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
-    });
+  /**
+   * Sleep helper with promise
+   */
+  sleep(ms) {
+    return new Promise(r => setTimeout(r, ms));
+  }
 
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({}));
-      throw new Error(error.error?.message || `API error: ${response.status}`);
+  /**
+   * Make a request with intelligent rate limiting and exponential backoff
+   */
+  async request(url, options = {}) {
+    let lastError;
+    let backoffMs = INITIAL_BACKOFF_MS;
+
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const response = await fetch(url, {
+          ...options,
+          headers: {
+            'Authorization': `Bearer ${this.apiKey}`,
+            'Content-Type': 'application/json',
+            ...options.headers,
+          },
+        });
+
+        // Handle rate limiting (429 Too Many Requests)
+        if (response.status === 429) {
+          const retryAfter = response.headers.get('Retry-After');
+          const waitTime = retryAfter ? parseInt(retryAfter) * 1000 : backoffMs;
+
+          // Increase delay for future requests
+          this.currentDelay = Math.min(this.currentDelay * 1.5, 1000);
+
+          if (attempt < MAX_RETRIES) {
+            console.log(`Rate limited. Waiting ${waitTime}ms before retry ${attempt + 1}/${MAX_RETRIES}`);
+            await this.sleep(waitTime);
+            backoffMs = Math.min(backoffMs * 2, MAX_BACKOFF_MS);
+            continue;
+          }
+          throw new Error('Rate limit exceeded after maximum retries');
+        }
+
+        // Success - gradually reduce delay back to normal
+        if (this.currentDelay > INITIAL_DELAY_MS) {
+          this.currentDelay = Math.max(this.currentDelay * 0.9, INITIAL_DELAY_MS);
+        }
+
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({}));
+          throw new Error(error.error?.message || `API error: ${response.status}`);
+        }
+
+        return response.json();
+      } catch (error) {
+        lastError = error;
+
+        // Don't retry on non-network errors (except rate limiting handled above)
+        if (error.message && !error.message.includes('fetch')) {
+          throw error;
+        }
+
+        // Network error - retry with backoff
+        if (attempt < MAX_RETRIES) {
+          console.log(`Network error. Waiting ${backoffMs}ms before retry ${attempt + 1}/${MAX_RETRIES}`);
+          await this.sleep(backoffMs);
+          backoffMs = Math.min(backoffMs * 2, MAX_BACKOFF_MS);
+          continue;
+        }
+      }
     }
 
-    return response.json();
+    throw lastError || new Error('Request failed after maximum retries');
   }
 
   /**
@@ -95,10 +159,18 @@ export class AirtableClient {
   }
 
   /**
-   * Fetch all records from a table with pagination
+   * Fetch all records from a table with pagination and streaming support
+   *
+   * @param {string} tableName - Name of the table to fetch from
+   * @param {Object} options - Fetch options
+   * @param {string[]} options.fields - Fields to fetch (empty = all fields)
+   * @param {string} options.filterFormula - Airtable filter formula
+   * @param {Function} options.onProgress - Progress callback with {page, fetched, total, hasMore}
+   * @param {Function} options.onRecords - Streaming callback, called with new records as they arrive
+   * @returns {Promise<Array>} All fetched records
    */
   async getAllRecords(tableName, options = {}) {
-    const { fields = [], filterFormula = '', onProgress = null } = options;
+    const { fields = [], filterFormula = '', onProgress = null, onRecords = null } = options;
     const allRecords = [];
     let offset = null;
     let pageNum = 0;
@@ -124,18 +196,24 @@ export class AirtableClient {
       offset = result.offset;
       pageNum++;
 
+      // Stream new records to callback immediately
+      if (onRecords) {
+        onRecords(result.records, allRecords);
+      }
+
       if (onProgress) {
         onProgress({
           page: pageNum,
           fetched: result.records.length,
           total: allRecords.length,
           hasMore: !!offset,
+          delay: this.currentDelay,
         });
       }
 
-      // Rate limiting - 5 requests/second max
+      // Adaptive rate limiting - uses current delay which adjusts based on rate limit responses
       if (offset) {
-        await new Promise(r => setTimeout(r, 200));
+        await this.sleep(this.currentDelay);
       }
     } while (offset);
 
