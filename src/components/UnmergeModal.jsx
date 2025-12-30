@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { AirtableClient } from '../lib/airtable.js';
-import { buildUnmergePayload } from '../lib/merge.js';
+import { buildUnmergePayload, parseDedupeHistory } from '../lib/merge.js';
 
 /**
  * UnmergeModal Component
@@ -53,14 +53,19 @@ export default function UnmergeModal({
       const createdRecords = [];
 
       for (const toCreate of payload.recordsToCreate) {
+        // Preserve any original history from the record and append the unmerge event
+        const originalHistory = parseDedupeHistory(toCreate.fields.dedupe_history);
+        const unmergeEntry = {
+          ...payload.unmergeHistoryEntry,
+          notes: notes || payload.unmergeHistoryEntry.notes,
+        };
+        const updatedHistory = [...originalHistory, unmergeEntry];
+
         const created = await client.createRecord(
           credentials.tableName,
           {
             ...toCreate.fields,
-            dedupe_history: JSON.stringify([{
-              ...payload.unmergeHistoryEntry,
-              notes: notes || payload.unmergeHistoryEntry.notes,
-            }]),
+            dedupe_history: JSON.stringify(updatedHistory, null, 2),
           }
         );
         createdRecords.push(created);
