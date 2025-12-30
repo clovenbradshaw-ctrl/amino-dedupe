@@ -137,6 +137,11 @@ export default function UnmergeModal({
             <li>
               Restore all field values from the time of the original merge
             </li>
+            {mergeEvent.survivor_field_snapshot && (
+              <li>
+                Restore the survivor record to its pre-merge state
+              </li>
+            )}
             <li>
               Re-link any associated records (cases, events, etc.)
             </li>
