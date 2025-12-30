@@ -1,0 +1,1436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bahr Client Deduplication Tool</title>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      min-height: 100vh;
+      color: #e2e8f0;
+    }
+    .container { max-width: 1600px; margin: 0 auto; padding: 20px; }
+    h1 { color: #a5b4fc; margin-bottom: 10px; }
+    .subtitle { color: #94a3b8; margin-bottom: 20px; }
+
+    .card {
+      background: rgba(30, 41, 59, 0.8);
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    .card h2 { color: #a5b4fc; margin-bottom: 15px; font-size: 1.2em; }
+    .card h3 { color: #94a3b8; margin-bottom: 10px; font-size: 1em; }
+
+    .input-group { margin-bottom: 15px; }
+    .input-group label { display: block; margin-bottom: 5px; color: #94a3b8; }
+    input[type="text"], input[type="password"], select, textarea {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #475569;
+      border-radius: 6px;
+      background: #1e293b;
+      color: #e2e8f0;
+    }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: #6366f1; }
+
+    button {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.9em;
+      transition: all 0.2s;
+    }
+    button.primary { background: #6366f1; color: white; }
+    button.primary:hover { background: #4f46e5; }
+    button.success { background: #10b981; color: white; }
+    button.success:hover { background: #059669; }
+    button.warning { background: #f59e0b; color: white; }
+    button.warning:hover { background: #d97706; }
+    button.danger { background: #ef4444; color: white; }
+    button.danger:hover { background: #dc2626; }
+    button:disabled { background: #475569; cursor: not-allowed; opacity: 0.6; }
+
+    .btn-group { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 15px; }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 15px;
+      margin: 15px 0;
+    }
+    .stat-card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 15px;
+      text-align: center;
+    }
+    .stat-card .number { font-size: 1.8em; font-weight: bold; color: #10b981; }
+    .stat-card .label { color: #94a3b8; font-size: 0.85em; }
+    .stat-card.warning .number { color: #f59e0b; }
+    .stat-card.danger .number { color: #ef4444; }
+    .stat-card.info .number { color: #6366f1; }
+
+    .table-container { overflow-x: auto; margin: 15px 0; max-height: 500px; overflow-y: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.85em; }
+    th, td { padding: 10px; text-align: left; border-bottom: 1px solid #334155; }
+    th { background: #1e293b; position: sticky; top: 0; color: #a5b4fc; z-index: 10; }
+    tr:hover { background: rgba(99, 102, 241, 0.1); }
+
+    .group-header {
+      background: #334155 !important;
+      font-weight: bold;
+    }
+    .group-header td {
+      color: #a5b4fc;
+      border-bottom: 2px solid #6366f1;
+    }
+
+    .keep-row { background: rgba(16, 185, 129, 0.15); }
+    .delete-row { background: rgba(239, 68, 68, 0.15); }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.8em;
+      font-weight: 500;
+    }
+    .badge.keep { background: #10b981; color: white; }
+    .badge.delete { background: #ef4444; color: white; }
+    .badge.box { background: #6366f1; color: white; }
+
+    .log-container {
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 15px;
+      max-height: 300px;
+      overflow-y: auto;
+      font-family: monospace;
+      font-size: 0.85em;
+    }
+    .log-entry { padding: 4px 0; border-bottom: 1px solid #1e293b; }
+    .log-entry.info { color: #6366f1; }
+    .log-entry.success { color: #10b981; }
+    .log-entry.warning { color: #f59e0b; }
+    .log-entry.error { color: #ef4444; }
+
+    .progress-bar {
+      background: #1e293b;
+      border-radius: 4px;
+      height: 8px;
+      overflow: hidden;
+      margin: 10px 0;
+    }
+    .progress-bar .fill {
+      height: 100%;
+      background: linear-gradient(90deg, #6366f1, #10b981);
+      transition: width 0.3s;
+    }
+
+    .tabs { display: flex; gap: 5px; margin-bottom: 15px; }
+    .tab {
+      padding: 10px 20px;
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 6px 6px 0 0;
+      cursor: pointer;
+      color: #94a3b8;
+    }
+    .tab.active { background: #334155; color: #a5b4fc; border-bottom-color: #334155; }
+
+    .box-info {
+      background: #1e293b;
+      border: 1px solid #475569;
+      border-radius: 6px;
+      padding: 15px;
+      margin-top: 15px;
+    }
+    .box-info h4 { color: #f59e0b; margin-bottom: 10px; }
+    .box-info pre {
+      background: #0f172a;
+      padding: 10px;
+      border-radius: 4px;
+      overflow-x: auto;
+      font-size: 0.85em;
+      color: #94a3b8;
+    }
+
+    .checkbox-label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      color: #94a3b8;
+    }
+    .checkbox-label input {
+      width: 18px;
+      height: 18px;
+    }
+
+    .filter-controls {
+      display: flex;
+      gap: 15px;
+      flex-wrap: wrap;
+      margin-bottom: 15px;
+      align-items: center;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+const { useState, useCallback, useEffect, useRef } = React;
+
+// ============================================
+// CONFIGURATION
+// ============================================
+
+const AIRTABLE_BASE_ID = 'app1tsUyKa7F3sy0D';
+const CLIENT_INFO_TABLE = 'Client Info';
+
+// Fields to fetch from Airtable for deduplication
+const FIELDS_TO_FETCH = [
+  'Client Name',
+  'Full_Name_Normal_Pretty',
+  'First Name',
+  'Middle Name',
+  'Family Name',
+  'A#',
+  'DOB',
+  'Phone Number',
+  'Client Email',
+  'Address',
+  'Address Line 1',
+  'City',
+  'State',
+  'Zip (5)',
+  'Country',
+  'Entry Date',
+  'PPID',
+  'Box_Folder_ID',
+  'box_shared_link',
+  'Box Legacy ID',
+  'clio_contact_id',
+  'Client ID',
+  'Created At',
+  'Airtable_Last_Modified',
+  'Bahr Client',
+  'Case Master View',
+  'Events',
+  'Relationships',
+  'Client Notes',
+  'Matters',
+];
+
+// ============================================
+// AIRTABLE CLIENT
+// ============================================
+
+class AirtableClient {
+  constructor(apiKey, baseId) {
+    this.apiKey = apiKey;
+    this.baseId = baseId;
+    this.baseUrl = `https://api.airtable.com/v0/${baseId}`;
+    this.metaUrl = `https://api.airtable.com/v0/meta/bases/${baseId}/tables`;
+  }
+
+  async request(endpoint, options = {}, useMetaUrl = false) {
+    const url = useMetaUrl ? endpoint : `${this.baseUrl}${endpoint}`;
+    const response = await fetch(url, {
+      ...options,
+      headers: {
+        'Authorization': `Bearer ${this.apiKey}`,
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.error?.message || `API error: ${response.status}`);
+    }
+
+    return response.json();
+  }
+
+  // Fetch table schema to determine writable vs computed fields
+  async getTableSchema(tableName, logCallback = null) {
+    try {
+      const result = await this.request(this.metaUrl, {}, true);
+      const table = result.tables.find(t => t.name === tableName);
+      if (!table) {
+        throw new Error(`Table "${tableName}" not found`);
+      }
+
+      // Categorize fields
+      const schema = {
+        allFields: [],
+        writableFields: [],
+        computedFields: [],
+        linkFields: [],
+        textFields: [],
+      };
+
+      // Computed field types that cannot be written to
+      // Note: 'multipleLookupValues' is Airtable's actual type for lookup fields
+      const computedTypes = ['formula', 'rollup', 'count', 'lookup', 'multipleLookupValues', 'autoNumber', 'createdTime', 'lastModifiedTime', 'createdBy', 'lastModifiedBy', 'button'];
+
+      table.fields.forEach(field => {
+        schema.allFields.push(field.name);
+
+        // Skip computed fields by type, or by name pattern "(from" which indicates lookup
+        const isComputed = computedTypes.includes(field.type) || field.name.includes('(from');
+
+        if (isComputed) {
+          schema.computedFields.push(field.name);
+        } else {
+          schema.writableFields.push(field.name);
+
+          if (field.type === 'multipleRecordLinks') {
+            schema.linkFields.push(field.name);
+          } else {
+            schema.textFields.push(field.name);
+          }
+        }
+      });
+
+      if (logCallback) {
+        logCallback(`Schema loaded: ${schema.writableFields.length} writable fields, ${schema.computedFields.length} computed fields`, 'success');
+      }
+
+      return schema;
+    } catch (err) {
+      if (logCallback) {
+        logCallback(`Error fetching schema: ${err.message}`, 'error');
+      }
+      throw err;
+    }
+  }
+
+  async getAllRecords(tableName, fields = [], filterFormula = '', logCallback = null) {
+    const allRecords = [];
+    let offset = null;
+    let pageNum = 0;
+
+    do {
+      const params = new URLSearchParams();
+      if (fields.length > 0) {
+        fields.forEach(f => params.append('fields[]', f));
+      }
+      if (filterFormula) {
+        params.append('filterByFormula', filterFormula);
+      }
+      if (offset) {
+        params.append('offset', offset);
+      }
+      params.append('pageSize', '100');
+
+      const result = await this.request(`/${encodeURIComponent(tableName)}?${params}`);
+      allRecords.push(...result.records);
+      offset = result.offset;
+      pageNum++;
+
+      if (logCallback) {
+        logCallback(`Fetched page ${pageNum}: ${result.records.length} records (total: ${allRecords.length})`, 'info');
+      }
+
+      // Rate limiting
+      if (offset) {
+        await new Promise(r => setTimeout(r, 200));
+      }
+    } while (offset);
+
+    return allRecords;
+  }
+
+  async deleteRecords(tableName, recordIds, recordsInfo = [], logCallback = null) {
+    const results = [];
+    const total = recordIds.length;
+
+    // Process one record at a time with verbose logging
+    for (let i = 0; i < recordIds.length; i++) {
+      const recordId = recordIds[i];
+      const recordInfo = recordsInfo[i] || {};
+      const clientName = recordInfo.name || 'Unknown';
+      const score = recordInfo.score || 0;
+
+      if (logCallback) {
+        logCallback(`[${i + 1}/${total}] Deleting: ${clientName} (ID: ${recordId}, Score: ${score})`, 'info');
+      }
+
+      try {
+        const result = await this.request(`/${encodeURIComponent(tableName)}?records[]=${recordId}`, {
+          method: 'DELETE',
+        });
+        results.push(...result.records);
+
+        if (logCallback) {
+          logCallback(`[${i + 1}/${total}] ✓ Successfully deleted: ${clientName}`, 'success');
+        }
+      } catch (err) {
+        if (logCallback) {
+          logCallback(`[${i + 1}/${total}] ✗ Failed to delete ${clientName}: ${err.message}`, 'error');
+        }
+      }
+
+      // Rate limiting - 5 requests per second max
+      await new Promise(r => setTimeout(r, 250));
+    }
+
+    return results;
+  }
+
+  async updateRecord(tableName, recordId, fields, logCallback = null) {
+    try {
+      const result = await this.request(`/${encodeURIComponent(tableName)}/${recordId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ fields }),
+      });
+      return result;
+    } catch (err) {
+      if (logCallback) {
+        logCallback(`Failed to update record ${recordId}: ${err.message}`, 'error');
+      }
+      throw err;
+    }
+  }
+}
+
+// ============================================
+// MERGE LOGIC
+// ============================================
+
+// Fields to EXCLUDE from merging (Box fields need manual cleanup)
+const BOX_FIELDS = ['Box_Folder_ID', 'box_shared_link', 'Box Legacy ID'];
+
+// Compute merged fields dynamically using schema
+const computeMergedFields = (keepRecord, deleteRecords, schema) => {
+  const mergedFields = {};
+  const mergeLog = [];
+  const keepFields = keepRecord.record.fields || {};
+  const allRecords = [keepRecord, ...deleteRecords];
+
+  // Get writable fields from schema, excluding Box fields
+  // Also exclude fields with "(from" in name - these are lookup fields (computed)
+  const linkFields = schema.linkFields.filter(f => !BOX_FIELDS.includes(f) && !f.includes('(from'));
+  const textFields = schema.textFields.filter(f => !BOX_FIELDS.includes(f) && !f.includes('(from'));
+
+  // Merge link fields (combine all unique IDs)
+  linkFields.forEach(field => {
+    const allIds = new Set();
+    allRecords.forEach(r => {
+      const ids = r.record.fields[field] || [];
+      ids.forEach(id => allIds.add(id));
+    });
+
+    const currentIds = keepFields[field] || [];
+    const mergedIds = Array.from(allIds);
+
+    // Only include if there are new IDs to add
+    if (mergedIds.length > currentIds.length) {
+      mergedFields[field] = mergedIds;
+      const added = mergedIds.length - currentIds.length;
+      mergeLog.push(`${field}: added ${added} link(s)`);
+    }
+  });
+
+  // Merge text fields (prefer non-empty values, keep record takes priority)
+  textFields.forEach(field => {
+    const keepValue = keepFields[field];
+
+    // If keep record already has a value, don't overwrite
+    if (keepValue !== undefined && keepValue !== null && String(keepValue).trim()) {
+      return;
+    }
+
+    // Find first non-empty value from duplicates
+    for (const dr of deleteRecords) {
+      const dupValue = dr.record.fields[field];
+      if (dupValue !== undefined && dupValue !== null && String(dupValue).trim()) {
+        // Skip invalid emails
+        if (field === 'Client Email' && String(dupValue).includes('null@blank')) {
+          continue;
+        }
+        mergedFields[field] = dupValue;
+        mergeLog.push(`${field}: filled from duplicate`);
+        break;
+      }
+    }
+  });
+
+  return { mergedFields, mergeLog };
+};
+
+// Build merge note to append to flatpack
+const buildMergeNote = (keepRecord, deleteRecords, mergeLog) => {
+  const timestamp = new Date().toISOString();
+  const deletedIds = deleteRecords.map(dr => dr.record.id);
+
+  return {
+    _merge_event: {
+      timestamp,
+      kept_record_id: keepRecord.record.id,
+      deleted_record_ids: deletedIds,
+      deleted_count: deletedIds.length,
+      fields_merged: mergeLog,
+    }
+  };
+};
+
+// Update flatpack field with merge note
+const updateFlatpackWithMergeNote = (currentFlatpack, mergeNote) => {
+  let flatpackData = {};
+
+  // Parse existing flatpack if present
+  if (currentFlatpack) {
+    try {
+      flatpackData = JSON.parse(currentFlatpack);
+    } catch (e) {
+      // If not valid JSON, wrap it
+      flatpackData = { _original_data: currentFlatpack };
+    }
+  }
+
+  // Add merge history array if not present
+  if (!flatpackData._merge_history) {
+    flatpackData._merge_history = [];
+  }
+
+  // Append the new merge event
+  flatpackData._merge_history.push(mergeNote._merge_event);
+
+  return JSON.stringify(flatpackData);
+};
+
+// ============================================
+// NAME NORMALIZATION
+// ============================================
+
+// Remove accents/diacritics from a string (e.g., "García" -> "garcia")
+const removeAccents = (str) => {
+  if (!str) return '';
+  return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+};
+
+// Normalize a name for comparison (remove punctuation, accents, extra spaces, lowercase)
+const normalizeName = (name) => {
+  if (!name) return '';
+
+  return removeAccents(name)
+    .toLowerCase()
+    .trim()
+    // Remove common suffixes/prefixes
+    .replace(/\s*,\s*/g, ' ')
+    .replace(/\s+/g, ' ')
+    // Remove punctuation
+    .replace(/[.,\-'"()]/g, '')
+    // Remove extra whitespace
+    .replace(/\s+/g, ' ')
+    .trim();
+};
+
+// Build a deduplication key from First Name and Family Name fields
+// This is more reliable than using display names which can have different formats
+const buildDedupeKey = (record) => {
+  const fields = record.fields || {};
+  const firstName = normalizeName(fields['First Name'] || '');
+  const familyName = normalizeName(fields['Family Name'] || '');
+
+  // If we have both first and family name, combine and sort
+  if (firstName && familyName) {
+    // Sort the name parts alphabetically to handle name order variations
+    // e.g., "danny sarabia" and "sarabia danny" both become "danny|sarabia"
+    const parts = [firstName, familyName].sort();
+    return parts.join('|');
+  }
+
+  // If we only have family name, use it as the key
+  if (familyName) {
+    // Split family name into words and sort them for consistency
+    const words = familyName.split(' ').filter(Boolean).sort();
+    return words.join('|');
+  }
+
+  // If we only have first name, use it as the key
+  if (firstName) {
+    const words = firstName.split(' ').filter(Boolean).sort();
+    return words.join('|');
+  }
+
+  // Fallback: use normalized display name if structured fields unavailable
+  const displayName = getDisplayName(record);
+  if (displayName) {
+    // Split display name into words and sort them
+    const words = normalizeName(displayName).split(' ').filter(Boolean).sort();
+    if (words.length >= 2) {
+      return words.join('|');
+    }
+  }
+
+  return '';
+};
+
+// Build a composite name from first/middle/family name fields
+const buildCompositeName = (record) => {
+  const fields = record.fields || {};
+  const parts = [
+    fields['First Name'],
+    fields['Middle Name'],
+    fields['Family Name'],
+  ].filter(Boolean);
+
+  if (parts.length > 0) {
+    return parts.join(' ');
+  }
+
+  // Fallback to other name fields
+  return fields['Full_Name_Normal_Pretty'] ||
+         fields['Client Name'] ||
+         '';
+};
+
+// Get the best name for display
+const getDisplayName = (record) => {
+  const fields = record.fields || {};
+  return fields['Full_Name_Normal_Pretty'] ||
+         fields['Client Name'] ||
+         buildCompositeName(record) ||
+         `Record ${record.id}`;
+};
+
+// ============================================
+// RECORD SCORING
+// ============================================
+
+// Score a record based on completeness (higher = more data = better)
+const scoreRecord = (record) => {
+  const fields = record.fields || {};
+  let score = 0;
+
+  // Core identity fields (high value)
+  if (fields['A#'] && fields['A#'].trim()) score += 50;
+  if (fields['DOB']) score += 30;
+  if (fields['clio_contact_id']) score += 25;
+
+  // Box folder info (high value - indicates linked documents)
+  if (fields['Box_Folder_ID']) score += 40;
+  if (fields['box_shared_link']) score += 10;
+  if (fields['Box Legacy ID']) score += 10;
+
+  // Contact info
+  if (fields['Phone Number'] && fields['Phone Number'].trim()) score += 15;
+  if (fields['Client Email'] && fields['Client Email'].trim() && !fields['Client Email'].includes('null@blank')) score += 15;
+
+  // Address fields
+  if (fields['Address Line 1'] || fields['Address']) score += 10;
+  if (fields['City']) score += 5;
+  if (fields['State']) score += 5;
+  if (fields['Zip (5)']) score += 5;
+  if (fields['Country']) score += 5;
+
+  // Linked records (very high value - indicates real data)
+  const caseViews = fields['Case Master View'] || [];
+  score += caseViews.length * 100;
+
+  const events = fields['Events'] || [];
+  score += events.length * 50;
+
+  const relationships = fields['Relationships'] || [];
+  score += relationships.length * 30;
+
+  const notes = fields['Client Notes'] || [];
+  score += notes.length * 20;
+
+  const matters = fields['Matters'] || [];
+  score += matters.length * 80;
+
+  // Entry date (older records may be more established)
+  if (fields['Entry Date']) score += 10;
+
+  // PPID indicates Practice Panther link
+  if (fields['PPID']) score += 20;
+
+  // Name completeness
+  if (fields['First Name']) score += 5;
+  if (fields['Middle Name']) score += 3;
+  if (fields['Family Name']) score += 5;
+
+  return score;
+};
+
+// ============================================
+// MAIN APP
+// ============================================
+
+function App() {
+  const [apiKey, setApiKey] = useState(() => localStorage.getItem('airtable_api_key') || '');
+  const [baseId, setBaseId] = useState(AIRTABLE_BASE_ID);
+  const [loading, setLoading] = useState(false);
+  const [logs, setLogs] = useState([]);
+  const [progress, setProgress] = useState({ current: 0, total: 0, phase: '' });
+
+  const [schema, setSchema] = useState(null);
+  const [allRecords, setAllRecords] = useState([]);
+  const [duplicateGroups, setDuplicateGroups] = useState([]);
+  const [recordsToDelete, setRecordsToDelete] = useState([]);
+  const [recordsToKeep, setRecordsToKeep] = useState([]);
+  const [boxFoldersToDelete, setBoxFoldersToDelete] = useState([]);
+
+  const [activeTab, setActiveTab] = useState('duplicates');
+  const [showOnlyWithBox, setShowOnlyWithBox] = useState(false);
+
+  const logRef = useRef(null);
+
+  // Save API key to localStorage
+  useEffect(() => {
+    if (apiKey) {
+      localStorage.setItem('airtable_api_key', apiKey);
+    }
+  }, [apiKey]);
+
+  // Auto-scroll logs
+  useEffect(() => {
+    if (logRef.current) {
+      logRef.current.scrollTop = logRef.current.scrollHeight;
+    }
+  }, [logs]);
+
+  const addLog = useCallback((message, type = 'info') => {
+    const timestamp = new Date().toLocaleTimeString();
+    setLogs(prev => [...prev, { message, type, timestamp }]);
+  }, []);
+
+  const clearLogs = useCallback(() => {
+    setLogs([]);
+  }, []);
+
+  // Build filter formula for Bahr clients (all time)
+  const buildBahrFilter = () => {
+    // Filter: Bahr Client = true (no date restriction)
+    return `{Bahr Client}`;
+  };
+
+  // Fetch all client records
+  const fetchAllClients = async () => {
+    if (!apiKey) {
+      addLog('Please enter your Airtable API key', 'error');
+      return;
+    }
+
+    setLoading(true);
+    clearLogs();
+    setProgress({ current: 0, total: 0, phase: 'Fetching schema' });
+
+    try {
+      const client = new AirtableClient(apiKey, baseId);
+
+      // Step 1: Fetch schema to determine all fields
+      addLog('Fetching table schema...', 'info');
+      const tableSchema = await client.getTableSchema(CLIENT_INFO_TABLE, addLog);
+      setSchema(tableSchema);
+
+      addLog(`Link fields: ${tableSchema.linkFields.join(', ')}`, 'info');
+      addLog(`Writable text fields: ${tableSchema.textFields.length} fields`, 'info');
+      addLog(`Computed fields (excluded): ${tableSchema.computedFields.join(', ')}`, 'info');
+
+      // Step 2: Fetch all records with all writable fields (need flatpack for merge notes)
+      setProgress({ current: 0, total: 0, phase: 'Fetching records' });
+      addLog('Fetching all Bahr clients...', 'info');
+      const filterFormula = buildBahrFilter();
+      addLog(`Filter: ${filterFormula}`, 'info');
+
+      // Fetch all writable fields plus bahr_import_flatpack_data for merge notes
+      const fieldsToFetch = [...tableSchema.writableFields];
+      if (!fieldsToFetch.includes('bahr_import_flatpack_data')) {
+        fieldsToFetch.push('bahr_import_flatpack_data');
+      }
+
+      const records = await client.getAllRecords(CLIENT_INFO_TABLE, fieldsToFetch, filterFormula, addLog);
+
+      setAllRecords(records);
+      addLog(`Successfully fetched ${records.length} total client records`, 'success');
+
+      // Automatically find duplicates
+      findDuplicates(records);
+    } catch (err) {
+      addLog(`Error: ${err.message}`, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Find duplicate records
+  const findDuplicates = (records) => {
+    addLog('Analyzing records for duplicates...', 'info');
+    addLog('Using First Name + Family Name fields for deduplication', 'info');
+
+    // Group records by deduplication key (First Name + Family Name)
+    const nameGroups = new Map();
+
+    records.forEach(record => {
+      const dedupeKey = buildDedupeKey(record);
+
+      if (!dedupeKey) {
+        const displayName = getDisplayName(record);
+        addLog(`Skipping record ${record.id} (${displayName}) - no First Name/Family Name found`, 'warning');
+        return;
+      }
+
+      if (!nameGroups.has(dedupeKey)) {
+        nameGroups.set(dedupeKey, []);
+      }
+      nameGroups.get(dedupeKey).push(record);
+    });
+
+    // Find groups with more than one record (duplicates)
+    const dupeGroups = [];
+    const toDelete = [];
+    const toKeep = [];
+    const boxToDelete = [];
+
+    nameGroups.forEach((group, normalizedName) => {
+      if (group.length > 1) {
+        // Score each record
+        const scoredRecords = group.map(record => ({
+          record,
+          score: scoreRecord(record),
+          name: getDisplayName(record),
+        }));
+
+        // Sort by score descending (highest score = best record to keep)
+        scoredRecords.sort((a, b) => b.score - a.score);
+
+        const keepRecord = scoredRecords[0];
+        const deleteRecords = scoredRecords.slice(1);
+
+        dupeGroups.push({
+          normalizedName,
+          displayName: keepRecord.name,
+          keepRecord,
+          deleteRecords,
+          totalRecords: group.length,
+        });
+
+        toKeep.push(keepRecord);
+
+        deleteRecords.forEach(dr => {
+          toDelete.push(dr);
+
+          // Check for Box folder info on records to delete
+          const fields = dr.record.fields || {};
+          if (fields['Box_Folder_ID'] || fields['box_shared_link'] || fields['Box Legacy ID']) {
+            boxToDelete.push({
+              recordId: dr.record.id,
+              clientName: dr.name,
+              boxFolderId: fields['Box_Folder_ID'] || '',
+              boxSharedLink: fields['box_shared_link'] || '',
+              boxLegacyId: fields['Box Legacy ID'] || '',
+              score: dr.score,
+            });
+          }
+        });
+      }
+    });
+
+    // Sort duplicate groups by number of duplicates (most duplicates first)
+    dupeGroups.sort((a, b) => b.totalRecords - a.totalRecords);
+
+    setDuplicateGroups(dupeGroups);
+    setRecordsToDelete(toDelete);
+    setRecordsToKeep(toKeep);
+    setBoxFoldersToDelete(boxToDelete);
+
+    addLog(`Found ${dupeGroups.length} duplicate groups`, dupeGroups.length > 0 ? 'warning' : 'success');
+    addLog(`  - ${toKeep.length} records to keep`, 'info');
+    addLog(`  - ${toDelete.length} records to delete`, toDelete.length > 0 ? 'warning' : 'info');
+    addLog(`  - ${boxToDelete.length} Box folders that need cleanup`, boxToDelete.length > 0 ? 'warning' : 'info');
+  };
+
+  // Export duplicates to CSV
+  const exportDuplicatesToCSV = () => {
+    if (recordsToDelete.length === 0) {
+      addLog('No duplicates to export', 'warning');
+      return;
+    }
+
+    const rows = recordsToDelete.map(dr => {
+      const fields = dr.record.fields || {};
+      return {
+        'Action': 'DELETE',
+        'Record ID': dr.record.id,
+        'Client Name': dr.name,
+        'Score': dr.score,
+        'A#': fields['A#'] || '',
+        'DOB': fields['DOB'] || '',
+        'Phone': fields['Phone Number'] || '',
+        'Email': fields['Client Email'] || '',
+        'Box_Folder_ID': fields['Box_Folder_ID'] || '',
+        'box_shared_link': fields['box_shared_link'] || '',
+        'Box Legacy ID': fields['Box Legacy ID'] || '',
+        'PPID': fields['PPID'] || '',
+        'clio_contact_id': fields['clio_contact_id'] || '',
+        'Case Master Views': (fields['Case Master View'] || []).length,
+        'Events': (fields['Events'] || []).length,
+        'Relationships': (fields['Relationships'] || []).length,
+        'Is Bahr Client': fields['Bahr Client'] ? 'Yes' : 'No',
+      };
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Duplicates to Delete');
+
+    const timestamp = new Date().toISOString().split('T')[0];
+    XLSX.writeFile(workbook, `client_duplicates_to_delete_${timestamp}.xlsx`);
+
+    addLog(`Exported ${rows.length} duplicate records to Excel`, 'success');
+  };
+
+  // Export Box folders to delete
+  const exportBoxFoldersToCSV = () => {
+    if (boxFoldersToDelete.length === 0) {
+      addLog('No Box folders to export', 'warning');
+      return;
+    }
+
+    const rows = boxFoldersToDelete.map(box => ({
+      'Record ID': box.recordId,
+      'Client Name': box.clientName,
+      'Box_Folder_ID': box.boxFolderId,
+      'box_shared_link': box.boxSharedLink,
+      'Box Legacy ID': box.boxLegacyId,
+      'Record Score': box.score,
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Box Folders to Delete');
+
+    const timestamp = new Date().toISOString().split('T')[0];
+    XLSX.writeFile(workbook, `box_folders_to_delete_${timestamp}.xlsx`);
+
+    addLog(`Exported ${rows.length} Box folder records to Excel`, 'success');
+  };
+
+  // Export full analysis
+  const exportFullAnalysis = () => {
+    if (duplicateGroups.length === 0) {
+      addLog('No duplicates to export', 'warning');
+      return;
+    }
+
+    const rows = [];
+
+    duplicateGroups.forEach(group => {
+      // Add keep record
+      const keepFields = group.keepRecord.record.fields || {};
+      rows.push({
+        'Group': group.displayName,
+        'Action': 'KEEP',
+        'Record ID': group.keepRecord.record.id,
+        'Client Name': group.keepRecord.name,
+        'Score': group.keepRecord.score,
+        'A#': keepFields['A#'] || '',
+        'DOB': keepFields['DOB'] || '',
+        'Phone': keepFields['Phone Number'] || '',
+        'Email': keepFields['Client Email'] || '',
+        'Box_Folder_ID': keepFields['Box_Folder_ID'] || '',
+        'box_shared_link': keepFields['box_shared_link'] || '',
+        'Case Master Views': (keepFields['Case Master View'] || []).length,
+        'Events': (keepFields['Events'] || []).length,
+        'PPID': keepFields['PPID'] || '',
+        'Is Bahr Client': keepFields['Bahr Client'] ? 'Yes' : 'No',
+      });
+
+      // Add delete records
+      group.deleteRecords.forEach(dr => {
+        const fields = dr.record.fields || {};
+        rows.push({
+          'Group': group.displayName,
+          'Action': 'DELETE',
+          'Record ID': dr.record.id,
+          'Client Name': dr.name,
+          'Score': dr.score,
+          'A#': fields['A#'] || '',
+          'DOB': fields['DOB'] || '',
+          'Phone': fields['Phone Number'] || '',
+          'Email': fields['Client Email'] || '',
+          'Box_Folder_ID': fields['Box_Folder_ID'] || '',
+          'box_shared_link': fields['box_shared_link'] || '',
+          'Case Master Views': (fields['Case Master View'] || []).length,
+          'Events': (fields['Events'] || []).length,
+          'PPID': fields['PPID'] || '',
+          'Is Bahr Client': fields['Bahr Client'] ? 'Yes' : 'No',
+        });
+      });
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Full Analysis');
+
+    const timestamp = new Date().toISOString().split('T')[0];
+    XLSX.writeFile(workbook, `client_dedupe_full_analysis_${timestamp}.xlsx`);
+
+    addLog(`Exported full analysis with ${rows.length} records to Excel`, 'success');
+  };
+
+  // Export just record IDs to delete
+  const exportRecordIdsToDelete = () => {
+    if (recordsToDelete.length === 0) {
+      addLog('No records to delete', 'warning');
+      return;
+    }
+
+    const ids = recordsToDelete.map(dr => dr.record.id);
+    const json = JSON.stringify(ids, null, 2);
+
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `record_ids_to_delete_${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    addLog(`Exported ${ids.length} record IDs to JSON`, 'success');
+  };
+
+  // Merge and delete records from Airtable (bulk operation)
+  const mergeAndDeleteRecords = async () => {
+    if (duplicateGroups.length === 0) {
+      addLog('No duplicate groups to process', 'warning');
+      return;
+    }
+
+    if (!schema) {
+      addLog('Schema not loaded. Please fetch clients first.', 'error');
+      return;
+    }
+
+    // Single confirmation for bulk operation
+    if (!window.confirm(`BULK MERGE & DELETE\n\nThis will:\n• Merge all non-computed fields from ${recordsToDelete.length} duplicates into ${duplicateGroups.length} kept records\n• Add merge history to bahr_import_flatpack_data\n• DELETE ${recordsToDelete.length} duplicate records\n• Box folder links will NOT be merged (require manual cleanup)\n\nThis cannot be undone! Continue?`)) {
+      return;
+    }
+
+    setLoading(true);
+    const client = new AirtableClient(apiKey, baseId);
+
+    // Phase 1: Merge data into kept records
+    addLog(``, 'info');
+    addLog(`========================================`, 'info');
+    addLog(`PHASE 1: Merging ${duplicateGroups.length} groups (all non-computed fields)...`, 'info');
+    addLog(`========================================`, 'info');
+
+    let mergeSuccessCount = 0;
+    let mergeErrorCount = 0;
+    let noChangeCount = 0;
+
+    for (let i = 0; i < duplicateGroups.length; i++) {
+      const group = duplicateGroups[i];
+      const keepRecordId = group.keepRecord.record.id;
+      const clientName = group.keepRecord.name;
+
+      // Compute merged fields using schema
+      const { mergedFields, mergeLog } = computeMergedFields(group.keepRecord, group.deleteRecords, schema);
+
+      // Build merge note for flatpack
+      const mergeNote = buildMergeNote(group.keepRecord, group.deleteRecords, mergeLog);
+
+      // Update flatpack with merge note
+      const currentFlatpack = group.keepRecord.record.fields['bahr_import_flatpack_data'];
+      const updatedFlatpack = updateFlatpackWithMergeNote(currentFlatpack, mergeNote);
+      mergedFields['bahr_import_flatpack_data'] = updatedFlatpack;
+
+      if (mergeLog.length === 0) {
+        addLog(`[${i + 1}/${duplicateGroups.length}] ${clientName}: No data changes (adding merge note only)`, 'info');
+        noChangeCount++;
+      } else {
+        addLog(`[${i + 1}/${duplicateGroups.length}] ${clientName}: ${mergeLog.join(', ')}`, 'info');
+      }
+
+      try {
+        await client.updateRecord(CLIENT_INFO_TABLE, keepRecordId, mergedFields, addLog);
+        mergeSuccessCount++;
+      } catch (err) {
+        addLog(`[${i + 1}/${duplicateGroups.length}] ✗ Failed: ${err.message}`, 'error');
+        mergeErrorCount++;
+      }
+
+      // Rate limiting
+      await new Promise(r => setTimeout(r, 200));
+    }
+
+    addLog(``, 'info');
+    addLog(`Merge complete: ${mergeSuccessCount} updated, ${noChangeCount} no changes, ${mergeErrorCount} errors`, mergeErrorCount > 0 ? 'warning' : 'success');
+
+    // Phase 2: Delete duplicate records
+    addLog(``, 'info');
+    addLog(`========================================`, 'info');
+    addLog(`PHASE 2: Deleting ${recordsToDelete.length} duplicate records...`, 'warning');
+    addLog(`========================================`, 'info');
+
+    const idsToDelete = recordsToDelete.map(dr => dr.record.id);
+    const recordsInfo = recordsToDelete.map(dr => ({
+      name: dr.name,
+      score: dr.score,
+      aNumber: dr.record.fields['A#'] || '',
+    }));
+
+    const results = await client.deleteRecords(CLIENT_INFO_TABLE, idsToDelete, recordsInfo, addLog);
+
+    addLog(``, 'info');
+    addLog(`========================================`, 'success');
+    addLog(`COMPLETE: ${mergeSuccessCount} records merged, ${results.length} duplicates deleted`, 'success');
+    if (boxFoldersToDelete.length > 0) {
+      addLog(`NOTE: ${boxFoldersToDelete.length} Box folders need manual cleanup (see Box Folders tab)`, 'warning');
+    }
+    addLog(`========================================`, 'success');
+
+    // Refresh the data
+    setLoading(false);
+    await fetchAllClients();
+  };
+
+  // Filter duplicate groups based on current filters
+  // Note: Data is already filtered to Bahr clients created yesterday/today at the API level
+  const filteredGroups = duplicateGroups.filter(group => {
+    if (showOnlyWithBox) {
+      const hasBox = group.deleteRecords.some(dr => {
+        const fields = dr.record.fields || {};
+        return fields['Box_Folder_ID'] || fields['box_shared_link'] || fields['Box Legacy ID'];
+      });
+      if (!hasBox) return false;
+    }
+
+    return true;
+  });
+
+  return (
+    <div className="container">
+      <h1>Bahr Client Deduplication Tool</h1>
+      <p className="subtitle">Find, merge, and remove duplicate Bahr client records</p>
+
+      {/* API Configuration */}
+      <div className="card">
+        <h2>Airtable Configuration</h2>
+        <div className="input-group">
+          <label>API Key (Personal Access Token)</label>
+          <input
+            type="password"
+            value={apiKey}
+            onChange={e => setApiKey(e.target.value)}
+            placeholder="pat..."
+          />
+        </div>
+        <div className="input-group">
+          <label>Base ID</label>
+          <input
+            type="text"
+            value={baseId}
+            onChange={e => setBaseId(e.target.value)}
+            placeholder="app..."
+          />
+        </div>
+        <div className="btn-group">
+          <button className="primary" onClick={fetchAllClients} disabled={loading || !apiKey}>
+            {loading ? 'Loading...' : 'Fetch All Bahr Clients & Find Duplicates'}
+          </button>
+        </div>
+      </div>
+
+      {/* Progress */}
+      {loading && (
+        <div className="card">
+          <div className="progress-bar">
+            <div
+              className="fill"
+              style={{ width: progress.total ? `${(progress.current / progress.total) * 100}%` : '50%' }}
+            />
+          </div>
+          <p style={{ textAlign: 'center', color: '#94a3b8' }}>{progress.phase}</p>
+        </div>
+      )}
+
+      {/* Statistics */}
+      {allRecords.length > 0 && (
+        <div className="stats-grid">
+          <div className="stat-card info">
+            <div className="number">{allRecords.length}</div>
+            <div className="label">Total Records</div>
+          </div>
+          <div className="stat-card warning">
+            <div className="number">{duplicateGroups.length}</div>
+            <div className="label">Duplicate Groups</div>
+          </div>
+          <div className="stat-card success">
+            <div className="number">{recordsToKeep.length}</div>
+            <div className="label">Records to Keep</div>
+          </div>
+          <div className="stat-card danger">
+            <div className="number">{recordsToDelete.length}</div>
+            <div className="label">Records to Delete</div>
+          </div>
+          <div className="stat-card warning">
+            <div className="number">{boxFoldersToDelete.length}</div>
+            <div className="label">Box Folders to Clean</div>
+          </div>
+        </div>
+      )}
+
+      {/* Tabs */}
+      {duplicateGroups.length > 0 && (
+        <div className="tabs">
+          <div
+            className={`tab ${activeTab === 'duplicates' ? 'active' : ''}`}
+            onClick={() => setActiveTab('duplicates')}
+          >
+            Duplicate Groups ({filteredGroups.length})
+          </div>
+          <div
+            className={`tab ${activeTab === 'box' ? 'active' : ''}`}
+            onClick={() => setActiveTab('box')}
+          >
+            Box Folders ({boxFoldersToDelete.length})
+          </div>
+          <div
+            className={`tab ${activeTab === 'export' ? 'active' : ''}`}
+            onClick={() => setActiveTab('export')}
+          >
+            Export & Actions
+          </div>
+        </div>
+      )}
+
+      {/* Duplicates Table */}
+      {activeTab === 'duplicates' && duplicateGroups.length > 0 && (
+        <div className="card">
+          <h2>Duplicate Groups</h2>
+
+          <div className="filter-controls">
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={showOnlyWithBox}
+                onChange={e => setShowOnlyWithBox(e.target.checked)}
+              />
+              Show only groups with Box folders
+            </label>
+            <span style={{ color: '#10b981', fontSize: '0.9em' }}>
+              (Showing Bahr clients only)
+            </span>
+          </div>
+
+          <div className="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Action</th>
+                  <th>Client Name</th>
+                  <th>Score</th>
+                  <th>Record ID</th>
+                  <th>A#</th>
+                  <th>DOB</th>
+                  <th>Box Folder ID</th>
+                  <th>Cases</th>
+                  <th>Events</th>
+                  <th>Bahr</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredGroups.map((group, groupIdx) => (
+                  <React.Fragment key={group.normalizedName}>
+                    {/* Group header */}
+                    <tr className="group-header">
+                      <td colSpan="10">
+                        {group.displayName} ({group.totalRecords} duplicates)
+                      </td>
+                    </tr>
+                    {/* Keep record */}
+                    <tr className="keep-row">
+                      <td><span className="badge keep">KEEP</span></td>
+                      <td>{group.keepRecord.name}</td>
+                      <td><strong>{group.keepRecord.score}</strong></td>
+                      <td><code>{group.keepRecord.record.id}</code></td>
+                      <td>{group.keepRecord.record.fields['A#'] || '-'}</td>
+                      <td>{group.keepRecord.record.fields['DOB'] || '-'}</td>
+                      <td>
+                        {group.keepRecord.record.fields['Box_Folder_ID'] ? (
+                          <span className="badge box">{group.keepRecord.record.fields['Box_Folder_ID']}</span>
+                        ) : '-'}
+                      </td>
+                      <td>{(group.keepRecord.record.fields['Case Master View'] || []).length}</td>
+                      <td>{(group.keepRecord.record.fields['Events'] || []).length}</td>
+                      <td>{group.keepRecord.record.fields['Bahr Client'] ? 'Yes' : 'No'}</td>
+                    </tr>
+                    {/* Delete records */}
+                    {group.deleteRecords.map(dr => (
+                      <tr key={dr.record.id} className="delete-row">
+                        <td><span className="badge delete">DELETE</span></td>
+                        <td>{dr.name}</td>
+                        <td>{dr.score}</td>
+                        <td><code>{dr.record.id}</code></td>
+                        <td>{dr.record.fields['A#'] || '-'}</td>
+                        <td>{dr.record.fields['DOB'] || '-'}</td>
+                        <td>
+                          {dr.record.fields['Box_Folder_ID'] ? (
+                            <span className="badge box">{dr.record.fields['Box_Folder_ID']}</span>
+                          ) : '-'}
+                        </td>
+                        <td>{(dr.record.fields['Case Master View'] || []).length}</td>
+                        <td>{(dr.record.fields['Events'] || []).length}</td>
+                        <td>{dr.record.fields['Bahr Client'] ? 'Yes' : 'No'}</td>
+                      </tr>
+                    ))}
+                  </React.Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Box Folders Tab */}
+      {activeTab === 'box' && boxFoldersToDelete.length > 0 && (
+        <div className="card">
+          <h2>Box Folders to Delete</h2>
+          <p style={{ color: '#f59e0b', marginBottom: '15px' }}>
+            These Box folders are associated with duplicate records that will be deleted.
+            You should manually delete or archive these folders in Box.
+          </p>
+
+          <div className="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Client Name</th>
+                  <th>Record ID</th>
+                  <th>Box Folder ID</th>
+                  <th>Box Shared Link</th>
+                  <th>Box Legacy ID</th>
+                </tr>
+              </thead>
+              <tbody>
+                {boxFoldersToDelete.map(box => (
+                  <tr key={box.recordId}>
+                    <td>{box.clientName}</td>
+                    <td><code>{box.recordId}</code></td>
+                    <td>{box.boxFolderId || '-'}</td>
+                    <td>
+                      {box.boxSharedLink ? (
+                        <a href={box.boxSharedLink} target="_blank" rel="noopener noreferrer" style={{ color: '#6366f1' }}>
+                          View Folder
+                        </a>
+                      ) : '-'}
+                    </td>
+                    <td>{box.boxLegacyId || '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="box-info">
+            <h4>Box Folder IDs to Delete (copy for Box admin)</h4>
+            <pre>{boxFoldersToDelete.filter(b => b.boxFolderId).map(b => b.boxFolderId).join('\n') || 'No folder IDs found'}</pre>
+          </div>
+        </div>
+      )}
+
+      {/* Export & Actions Tab */}
+      {activeTab === 'export' && duplicateGroups.length > 0 && (
+        <div className="card">
+          <h2>Export & Actions</h2>
+
+          <div style={{ marginBottom: '20px' }}>
+            <h3>Export Options</h3>
+            <div className="btn-group">
+              <button className="primary" onClick={exportFullAnalysis}>
+                Export Full Analysis (Excel)
+              </button>
+              <button className="warning" onClick={exportDuplicatesToCSV}>
+                Export Duplicates to Delete (Excel)
+              </button>
+              <button className="warning" onClick={exportBoxFoldersToCSV}>
+                Export Box Folders (Excel)
+              </button>
+              <button className="primary" onClick={exportRecordIdsToDelete}>
+                Export Record IDs (JSON)
+              </button>
+            </div>
+          </div>
+
+          <div style={{ borderTop: '1px solid #475569', paddingTop: '20px' }}>
+            <h3 style={{ color: '#ef4444' }}>Bulk Merge & Delete</h3>
+            <p style={{ color: '#94a3b8', marginBottom: '10px' }}>
+              This will merge ALL non-computed fields (determined by schema) from duplicates into kept records:
+            </p>
+            <ul style={{ color: '#94a3b8', marginBottom: '15px', marginLeft: '20px', fontSize: '0.9em' }}>
+              <li>Link fields: Case Master Views, Events, Relationships, Notes, Matters, etc.</li>
+              <li>Text fields: A#, DOB, contact info, addresses, IDs, etc.</li>
+              <li>Adds merge history note to bahr_import_flatpack_data</li>
+              <li style={{ color: '#f59e0b' }}>Box folder fields are EXCLUDED (require manual cleanup)</li>
+            </ul>
+            <button
+              className="danger"
+              onClick={mergeAndDeleteRecords}
+              disabled={loading || duplicateGroups.length === 0 || !schema}
+            >
+              Bulk Merge & Delete: {duplicateGroups.length} groups ({recordsToDelete.length} duplicates)
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* No duplicates message */}
+      {allRecords.length > 0 && duplicateGroups.length === 0 && (
+        <div className="card">
+          <h2 style={{ color: '#10b981' }}>No Duplicates Found</h2>
+          <p>All {allRecords.length} client records have unique names.</p>
+        </div>
+      )}
+
+      {/* Activity Log */}
+      <div className="card">
+        <h2>Activity Log</h2>
+        <div className="log-container" ref={logRef}>
+          {logs.length === 0 ? (
+            <div className="log-entry info">Ready - click "Fetch All Clients" to start</div>
+          ) : (
+            logs.map((log, idx) => (
+              <div key={idx} className={`log-entry ${log.type}`}>
+                [{log.timestamp}] {log.message}
+              </div>
+            ))
+          )}
+        </div>
+        {logs.length > 0 && (
+          <button
+            className="warning"
+            onClick={clearLogs}
+            style={{ marginTop: '10px' }}
+          >
+            Clear Log
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
