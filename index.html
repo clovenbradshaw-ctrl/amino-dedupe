@@ -194,11 +194,44 @@
 const { useState, useCallback, useEffect, useRef } = React;
 
 // ============================================
+// AUTHENTICATION
+// ============================================
+
+// Pre-computed SHA-256 hashes of passwords
+// All Clients password hash
+const ALL_CLIENTS_HASH = '66a0dda85ec791a862a57ac9d0ffca6a3aa3310cbe367ff2cd73e29dde2b0abd';
+// Bahr Only password hash
+const BAHR_ONLY_HASH = '472e01695e25f97cfc5d3418bd69628c485e539247712436973c2802f7c409bd';
+
+// Hash a password using SHA-256
+const hashPassword = async (password) => {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(password);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  return hashHex;
+};
+
+// Verify password and return access level
+const verifyPassword = async (password) => {
+  const hash = await hashPassword(password);
+  if (hash === ALL_CLIENTS_HASH) {
+    return 'all';
+  } else if (hash === BAHR_ONLY_HASH) {
+    return 'bahr';
+  }
+  return null;
+};
+
+// ============================================
 // CONFIGURATION
 // ============================================
 
 const AIRTABLE_BASE_ID = 'app1tsUyKa7F3sy0D';
 const CLIENT_INFO_TABLE = 'Client Info';
+const CLIENT_INFO_TABLE_ID = 'tbl0uHmtLkGyDnSP9';
+const CASE_MASTER_VIEW_TABLE_ID = 'tblgynOzESGvAXAsK';
 
 // Fields to fetch from Airtable for deduplication
 const FIELDS_TO_FETCH = [
@@ -671,10 +704,106 @@ const scoreRecord = (record) => {
 };
 
 // ============================================
+// LOGIN COMPONENT
+// ============================================
+
+function LoginScreen({ onLogin }) {
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+
+    try {
+      const accessLevel = await verifyPassword(password);
+      if (accessLevel) {
+        onLogin(accessLevel);
+      } else {
+        setError('Invalid password');
+      }
+    } catch (err) {
+      setError('Authentication error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
+      <div className="card" style={{ maxWidth: '400px', width: '100%' }}>
+        <h1 style={{ textAlign: 'center', marginBottom: '10px' }}>Client Deduplication Tool</h1>
+        <p className="subtitle" style={{ textAlign: 'center' }}>Enter password to continue</p>
+
+        <form onSubmit={handleSubmit}>
+          <div className="input-group">
+            <label>Password</label>
+            <input
+              type="password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              placeholder="Enter access password"
+              autoFocus
+            />
+          </div>
+
+          {error && (
+            <div style={{ color: '#ef4444', marginBottom: '15px', textAlign: 'center' }}>
+              {error}
+            </div>
+          )}
+
+          <button
+            type="submit"
+            className="primary"
+            disabled={loading || !password}
+            style={{ width: '100%' }}
+          >
+            {loading ? 'Verifying...' : 'Login'}
+          </button>
+        </form>
+
+        <p style={{ color: '#64748b', fontSize: '0.85em', textAlign: 'center', marginTop: '20px' }}>
+          Contact administrator for access credentials
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ============================================
 // MAIN APP
 // ============================================
 
 function App() {
+  // Authentication state
+  const [accessLevel, setAccessLevel] = useState(() => {
+    // Check if user was previously authenticated (session persistence)
+    return sessionStorage.getItem('access_level') || null;
+  });
+
+  const handleLogin = (level) => {
+    setAccessLevel(level);
+    sessionStorage.setItem('access_level', level);
+  };
+
+  const handleLogout = () => {
+    setAccessLevel(null);
+    sessionStorage.removeItem('access_level');
+  };
+
+  // If not authenticated, show login screen
+  if (!accessLevel) {
+    return <LoginScreen onLogin={handleLogin} />;
+  }
+
+  // Otherwise render the main app
+  return <MainApp accessLevel={accessLevel} onLogout={handleLogout} />;
+}
+
+function MainApp({ accessLevel, onLogout }) {
   const [apiKey, setApiKey] = useState(() => localStorage.getItem('airtable_api_key') || '');
   const [baseId, setBaseId] = useState(AIRTABLE_BASE_ID);
   const [loading, setLoading] = useState(false);
@@ -692,6 +821,9 @@ function App() {
   const [showOnlyWithBox, setShowOnlyWithBox] = useState(false);
 
   const logRef = useRef(null);
+
+  // Determine if we're in Bahr-only mode or all clients mode
+  const isBahrOnly = accessLevel === 'bahr';
 
   // Save API key to localStorage
   useEffect(() => {
@@ -716,10 +848,14 @@ function App() {
     setLogs([]);
   }, []);
 
-  // Build filter formula for Bahr clients (all time)
-  const buildBahrFilter = () => {
-    // Filter: Bahr Client = true (no date restriction)
-    return `{Bahr Client}`;
+  // Build filter formula based on access level
+  const buildClientFilter = () => {
+    if (isBahrOnly) {
+      // Bahr-only access: only show Bahr Client = true
+      return `{Bahr Client}`;
+    }
+    // All clients access: no filter (show all)
+    return '';
   };
 
   // Fetch all client records
@@ -747,9 +883,14 @@ function App() {
 
       // Step 2: Fetch all records with all writable fields (need flatpack for merge notes)
       setProgress({ current: 0, total: 0, phase: 'Fetching records' });
-      addLog('Fetching all Bahr clients...', 'info');
-      const filterFormula = buildBahrFilter();
-      addLog(`Filter: ${filterFormula}`, 'info');
+      const clientTypeLabel = isBahrOnly ? 'Bahr clients' : 'all clients';
+      addLog(`Fetching ${clientTypeLabel}...`, 'info');
+      const filterFormula = buildClientFilter();
+      if (filterFormula) {
+        addLog(`Filter: ${filterFormula}`, 'info');
+      } else {
+        addLog('No filter applied (all clients mode)', 'info');
+      }
 
       // Fetch all writable fields plus bahr_import_flatpack_data for merge notes
       const fieldsToFetch = [...tableSchema.writableFields];
@@ -1118,10 +1259,42 @@ function App() {
     return true;
   });
 
+  const accessLabel = isBahrOnly ? 'Bahr Clients Only' : 'All Clients';
+
   return (
     <div className="container">
-      <h1>Bahr Client Deduplication Tool</h1>
-      <p className="subtitle">Find, merge, and remove duplicate Bahr client records</p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '10px' }}>
+        <div>
+          <h1>Client Deduplication Tool</h1>
+          <p className="subtitle">Find, merge, and remove duplicate client records</p>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <span style={{
+            background: isBahrOnly ? '#6366f1' : '#10b981',
+            color: 'white',
+            padding: '6px 12px',
+            borderRadius: '6px',
+            fontSize: '0.85em',
+            fontWeight: '500'
+          }}>
+            {accessLabel}
+          </span>
+          <button
+            onClick={onLogout}
+            style={{
+              padding: '6px 12px',
+              background: '#475569',
+              color: '#e2e8f0',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              fontSize: '0.85em'
+            }}
+          >
+            Logout
+          </button>
+        </div>
+      </div>
 
       {/* API Configuration */}
       <div className="card">
@@ -1146,7 +1319,7 @@ function App() {
         </div>
         <div className="btn-group">
           <button className="primary" onClick={fetchAllClients} disabled={loading || !apiKey}>
-            {loading ? 'Loading...' : 'Fetch All Bahr Clients & Find Duplicates'}
+            {loading ? 'Loading...' : `Fetch ${isBahrOnly ? 'Bahr Clients' : 'All Clients'} & Find Duplicates`}
           </button>
         </div>
       </div>
@@ -1228,8 +1401,8 @@ function App() {
               />
               Show only groups with Box folders
             </label>
-            <span style={{ color: '#10b981', fontSize: '0.9em' }}>
-              (Showing Bahr clients only)
+            <span style={{ color: isBahrOnly ? '#6366f1' : '#10b981', fontSize: '0.9em' }}>
+              {isBahrOnly ? '(Bahr clients only)' : '(All clients)'}
             </span>
           </div>
 
