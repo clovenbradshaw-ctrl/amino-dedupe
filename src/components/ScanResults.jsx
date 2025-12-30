@@ -180,11 +180,6 @@ export default function ScanResults({
     return result;
   }, [groups, tierFilter, searchQuery, sortBy]);
 
-  // Groups with 3+ records (multi-record merge candidates)
-  const multiRecordGroups = useMemo(() => {
-    return filteredGroups.filter(g => g.records.length >= 3);
-  }, [filteredGroups]);
-
   // Paginated candidates for display
   const visibleCandidates = useMemo(() => {
     return filteredCandidates.slice(0, visibleCount);

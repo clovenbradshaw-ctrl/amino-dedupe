@@ -92,7 +92,7 @@ export default function MergeReview({
   }, []);
 
   // Execute the merge
-  const handleMerge = async () => {
+  const handleMerge = useCallback(async () => {
     if (hasUnresolvedDecisions(resolutions)) {
       log('Please resolve all field conflicts before merging', 'error');
       return;
@@ -145,7 +145,7 @@ export default function MergeReview({
     } finally {
       setMerging(false);
     }
-  };
+  }, [resolutions, credentials, candidate, toMerge, schema, notes, recordCount, onComplete, log]);
 
   // Keyboard shortcuts
   useEffect(() => {
