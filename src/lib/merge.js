@@ -40,6 +40,9 @@ export const DEFAULT_RESOLUTION_CONFIG = {
     'Created At',
     'Created Q Single Select',
     'Email Imported',
+    'Imported table 9',
+    'PPID copy',
+    'smsFolder',
     'Xano Last Updated',
   ],
 
