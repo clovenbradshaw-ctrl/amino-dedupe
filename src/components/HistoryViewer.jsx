@@ -18,10 +18,58 @@ export default function HistoryViewer({
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searching, setSearching] = useState(false);
+  const [recordsWithHistory, setRecordsWithHistory] = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(true);
 
   const log = (message, type = 'info') => {
     if (onLog) onLog(message, type);
   };
+
+  // Auto-load records with merge history on mount
+  useEffect(() => {
+    const loadRecordsWithHistory = async () => {
+      setLoadingHistory(true);
+      try {
+        const client = new AirtableClient(credentials.apiKey, credentials.baseId);
+
+        // Fetch records that have dedupe_history field populated
+        const filterFormula = `AND(dedupe_history != "", dedupe_history != "[]")`;
+
+        const records = await client.getAllRecords(credentials.tableName, {
+          filterFormula,
+          fields: ['Client Name', 'PPID', 'dedupe_history', 'First Name', 'Family Name'],
+        });
+
+        // Parse history and sort by most recent activity
+        const recordsWithParsedHistory = records
+          .map(record => {
+            const historyData = parseDedupeHistory(record.fields.dedupe_history);
+            const latestEvent = historyData.length > 0
+              ? historyData[historyData.length - 1]
+              : null;
+            return {
+              ...record,
+              parsedHistory: historyData,
+              latestTimestamp: latestEvent ? new Date(latestEvent.timestamp) : new Date(0),
+            };
+          })
+          .filter(r => r.parsedHistory.length > 0)
+          .sort((a, b) => b.latestTimestamp - a.latestTimestamp);
+
+        setRecordsWithHistory(recordsWithParsedHistory);
+
+        if (recordsWithParsedHistory.length > 0) {
+          log(`Found ${recordsWithParsedHistory.length} record(s) with merge history`, 'success');
+        }
+      } catch (err) {
+        log(`Failed to load merge history: ${err.message}`, 'error');
+      } finally {
+        setLoadingHistory(false);
+      }
+    };
+
+    loadRecordsWithHistory();
+  }, [credentials]);
 
   // Search for records
   const handleSearch = async () => {
@@ -109,6 +157,58 @@ export default function HistoryViewer({
         </button>
       </div>
 
+      {/* Auto-loaded Records with Merge History */}
+      {!selectedRecord && (
+        <div className="auto-loaded-history">
+          <h3>Records with Merge History</h3>
+          {loadingHistory ? (
+            <div className="loading-history">
+              <div className="loading-spinner"></div>
+              <span>Loading merge history...</span>
+            </div>
+          ) : recordsWithHistory.length === 0 ? (
+            <div className="no-history">
+              <p>No records with merge history found.</p>
+              <p className="subtle">Once you merge records, they will appear here for easy access.</p>
+            </div>
+          ) : (
+            <div className="history-record-list">
+              {recordsWithHistory.map(record => {
+                const latestEvent = record.parsedHistory[record.parsedHistory.length - 1];
+                const eventCount = record.parsedHistory.length;
+                const mergeCount = record.parsedHistory.filter(e => e.action === 'merge').length;
+
+                return (
+                  <div
+                    key={record.id}
+                    className="history-record-item"
+                    onClick={() => handleSelectRecord(record)}
+                  >
+                    <div className="record-main">
+                      <div className="record-name">
+                        {record.fields['Client Name'] ||
+                          `${record.fields['First Name'] || ''} ${record.fields['Family Name'] || ''}`.trim() ||
+                          record.id}
+                      </div>
+                      <div className="record-stats">
+                        <span className="event-count">{eventCount} event{eventCount !== 1 ? 's' : ''}</span>
+                        <span className="merge-count">{mergeCount} merge{mergeCount !== 1 ? 's' : ''}</span>
+                      </div>
+                    </div>
+                    <div className="record-meta">
+                      {record.fields.PPID && <span>PPID: {record.fields.PPID}</span>}
+                      <span className="last-activity">
+                        Last: {new Date(latestEvent.timestamp).toLocaleDateString()}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Search Results */}
       {searchResults.length > 0 && (
         <div className="search-results">
@@ -144,9 +244,20 @@ export default function HistoryViewer({
       {/* History Timeline */}
       {selectedRecord && (
         <div className="history-panel">
-          <h3>
-            History for: {selectedRecord.fields['Client Name'] || selectedRecord.id}
-          </h3>
+          <div className="history-panel-header">
+            <button
+              className="btn btn-secondary btn-small"
+              onClick={() => {
+                setSelectedRecord(null);
+                setHistory([]);
+              }}
+            >
+              ← Back to list
+            </button>
+            <h3>
+              History for: {selectedRecord.fields['Client Name'] || selectedRecord.id}
+            </h3>
+          </div>
 
           {history.length === 0 ? (
             <div className="empty-history">
