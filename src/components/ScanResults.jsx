@@ -2,6 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { AirtableClient } from '../lib/airtable.js';
 import { findDuplicateCandidates, groupCandidates, MATCH_TIERS } from '../lib/matching.js';
 
+const RECORDS_PER_PAGE = 300;
+
 /**
  * ScanResults Component
  * Displays duplicate candidates found by the matching engine.
@@ -19,6 +21,10 @@ export default function ScanResults({
   const [groups, setGroups] = useState([]);
   const [progress, setProgress] = useState({ phase: '', current: 0, total: 0 });
 
+  // Pagination
+  const [visibleCount, setVisibleCount] = useState(RECORDS_PER_PAGE);
+  const [loadingMore, setLoadingMore] = useState(false);
+
   // Filters
   const [tierFilter, setTierFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -30,6 +36,7 @@ export default function ScanResults({
 
   const runScan = async () => {
     setLoading(true);
+    setVisibleCount(RECORDS_PER_PAGE); // Reset pagination
     setProgress({ phase: 'Fetching records', current: 0, total: 0 });
 
     try {
@@ -90,6 +97,11 @@ export default function ScanResults({
     }
   };
 
+  // Reset visible count when filters change
+  useEffect(() => {
+    setVisibleCount(RECORDS_PER_PAGE);
+  }, [tierFilter, searchQuery, sortBy]);
+
   // Filter and sort candidates
   const filteredCandidates = useMemo(() => {
     let result = [...candidates];
@@ -126,6 +138,22 @@ export default function ScanResults({
 
     return result;
   }, [candidates, tierFilter, searchQuery, sortBy]);
+
+  // Paginated candidates for display
+  const visibleCandidates = useMemo(() => {
+    return filteredCandidates.slice(0, visibleCount);
+  }, [filteredCandidates, visibleCount]);
+
+  const hasMore = visibleCount < filteredCandidates.length;
+
+  const loadMore = () => {
+    setLoadingMore(true);
+    // Small delay for visual feedback
+    setTimeout(() => {
+      setVisibleCount(prev => prev + RECORDS_PER_PAGE);
+      setLoadingMore(false);
+    }, 300);
+  };
 
   // Stats
   const stats = useMemo(() => {
@@ -165,18 +193,26 @@ export default function ScanResults({
 
       {/* Progress */}
       {loading && (
-        <div className="progress-container">
-          <div className="progress-bar">
-            <div
-              className="progress-fill"
-              style={{
-                width: progress.total && typeof progress.total === 'number'
-                  ? `${(progress.current / progress.total) * 100}%`
-                  : '50%'
-              }}
-            />
+        <div className="loading-container">
+          <div className="loading-spinner">
+            <div className="spinner"></div>
           </div>
-          <p className="progress-text">{progress.phase}: {progress.current} / {progress.total}</p>
+          <div className="loading-details">
+            <p className="loading-phase">{progress.phase}</p>
+            <div className="progress-bar">
+              <div
+                className="progress-fill"
+                style={{
+                  width: progress.total && typeof progress.total === 'number'
+                    ? `${(progress.current / progress.total) * 100}%`
+                    : '100%'
+                }}
+              />
+            </div>
+            <p className="progress-text">
+              {progress.current.toLocaleString()} / {typeof progress.total === 'number' ? progress.total.toLocaleString() : progress.total}
+            </p>
+          </div>
         </div>
       )}
 
@@ -242,10 +278,13 @@ export default function ScanResults({
       {filteredCandidates.length > 0 && (
         <div className="candidate-list">
           <div className="list-header">
-            <span>Showing {filteredCandidates.length} of {candidates.length} matches</span>
+            <span>
+              Showing {visibleCandidates.length.toLocaleString()} of {filteredCandidates.length.toLocaleString()} matches
+              {filteredCandidates.length !== candidates.length && ` (${candidates.length.toLocaleString()} total)`}
+            </span>
           </div>
 
-          {filteredCandidates.map(candidate => (
+          {visibleCandidates.map(candidate => (
             <div
               key={candidate.id}
               className={`candidate-row tier-${candidate.tier.tier} ${candidate.isConflict ? 'conflict' : ''}`}
@@ -299,6 +338,29 @@ export default function ScanResults({
               </div>
             </div>
           ))}
+
+          {/* Load More Button */}
+          {hasMore && (
+            <div className="load-more-container">
+              <button
+                className="btn btn-secondary load-more-btn"
+                onClick={loadMore}
+                disabled={loadingMore}
+              >
+                {loadingMore ? (
+                  <>
+                    <span className="btn-spinner"></span>
+                    Loading...
+                  </>
+                ) : (
+                  `Load More (${Math.min(RECORDS_PER_PAGE, filteredCandidates.length - visibleCount).toLocaleString()} more)`
+                )}
+              </button>
+              <span className="load-more-info">
+                {(filteredCandidates.length - visibleCount).toLocaleString()} remaining
+              </span>
+            </div>
+          )}
         </div>
       )}
 
