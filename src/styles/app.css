@@ -1648,3 +1648,210 @@ textarea:disabled {
     width: 100%;
   }
 }
+
+/* ============================================
+   Multi-Record Merge Styles
+   ============================================ */
+
+/* Alert for multi-record groups */
+.multi-group-alert {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md);
+  background: rgba(99, 102, 241, 0.1);
+  border: 1px solid var(--accent-primary);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--spacing-lg);
+}
+
+.multi-group-alert .alert-icon {
+  font-size: 1.5rem;
+}
+
+.multi-group-alert .alert-text {
+  flex: 1;
+  color: var(--text-secondary);
+}
+
+/* Record count badge */
+.record-count-badge {
+  background: var(--accent-primary);
+  color: white;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  font-weight: bold;
+  margin-top: var(--spacing-xs);
+}
+
+.record-count-label {
+  background: rgba(99, 102, 241, 0.2);
+  color: var(--accent-primary);
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  font-weight: 500;
+  margin-left: var(--spacing-sm);
+}
+
+/* Group row styling */
+.candidate-row.group-row {
+  border-width: 2px;
+}
+
+.candidate-row.group-row.multi-record {
+  border-color: var(--accent-primary);
+  background: rgba(99, 102, 241, 0.03);
+}
+
+.candidate-row.group-row.multi-record:hover {
+  background: rgba(99, 102, 241, 0.08);
+}
+
+/* Records to merge list in group view */
+.records-to-merge {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.records-to-merge .record-info {
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background: rgba(245, 158, 11, 0.1);
+  border-radius: var(--radius-sm);
+}
+
+.more-records {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-style: italic;
+  padding: var(--spacing-xs) var(--spacing-sm);
+}
+
+/* Group records layout */
+.candidate-records.group-records {
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.candidate-records.group-records .record-info.survivor {
+  flex-shrink: 0;
+}
+
+/* Dynamic record headers grid */
+.record-headers.record-count-2 {
+  grid-template-columns: 1fr 1fr;
+}
+
+.record-headers.record-count-3 {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+
+.record-headers.record-count-4 {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.record-headers.record-count-5 {
+  grid-template-columns: repeat(5, 1fr);
+}
+
+.record-headers.record-count-6 {
+  grid-template-columns: repeat(6, 1fr);
+}
+
+/* For more than 6 records, use auto-fit */
+.record-headers[class*="record-count-"]:not(.record-count-2):not(.record-count-3):not(.record-count-4):not(.record-count-5):not(.record-count-6) {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+/* Multi-record merge review styling */
+.merge-review.multi-record .record-header {
+  padding: var(--spacing-sm);
+}
+
+.merge-review.multi-record .record-header .record-name {
+  font-size: 0.9rem;
+}
+
+.merge-review.multi-record .record-header .record-meta {
+  font-size: 0.75rem;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* Dynamic column widths for field diff table */
+.field-diff-table.columns-2 .field-name-col { width: 20%; }
+.field-diff-table.columns-2 .field-value-col { width: 30%; }
+.field-diff-table.columns-2 .field-action-col { width: 20%; }
+
+.field-diff-table.columns-3 .field-name-col { width: 16%; }
+.field-diff-table.columns-3 .field-value-col { width: 24%; }
+.field-diff-table.columns-3 .field-action-col { width: 12%; }
+
+.field-diff-table.columns-4 .field-name-col { width: 14%; }
+.field-diff-table.columns-4 .field-value-col { width: 20%; }
+.field-diff-table.columns-4 .field-action-col { width: 12%; }
+
+.field-diff-table.columns-5 .field-name-col { width: 12%; }
+.field-diff-table.columns-5 .field-value-col { width: 17%; }
+.field-diff-table.columns-5 .field-action-col { width: 10%; }
+
+.field-diff-table.columns-6 .field-name-col { width: 10%; }
+.field-diff-table.columns-6 .field-value-col { width: 14%; }
+.field-diff-table.columns-6 .field-action-col { width: 8%; }
+
+/* Compact value cells for multi-record */
+.merge-review.multi-record .value-cell {
+  font-size: 0.85rem;
+  padding: var(--spacing-xs);
+}
+
+/* Decision buttons for multi-record */
+.merge-review.multi-record .decision-buttons {
+  flex-wrap: wrap;
+}
+
+.merge-review.multi-record .btn-pick {
+  min-width: 24px;
+  padding: 2px 6px;
+  font-size: 0.75rem;
+}
+
+/* Scrollable table for many columns */
+.merge-review.multi-record .field-diff-container {
+  max-height: 60vh;
+  overflow: auto;
+}
+
+/* Responsive adjustments for multi-record */
+@media (max-width: 1024px) {
+  .record-headers.record-count-3,
+  .record-headers.record-count-4,
+  .record-headers.record-count-5,
+  .record-headers.record-count-6 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .merge-review.multi-record .field-diff-container {
+    overflow-x: auto;
+  }
+
+  .merge-review.multi-record .field-diff-table {
+    min-width: 800px;
+  }
+}
+
+@media (max-width: 640px) {
+  .record-headers.record-count-3,
+  .record-headers.record-count-4,
+  .record-headers.record-count-5,
+  .record-headers.record-count-6 {
+    grid-template-columns: 1fr;
+  }
+
+  .multi-group-alert {
+    flex-direction: column;
+    text-align: center;
+  }
+}

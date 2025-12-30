@@ -7,6 +7,7 @@ const RECORDS_PER_PAGE = 300;
 /**
  * ScanResults Component
  * Displays duplicate candidates found by the matching engine.
+ * Supports both pair view and group view for multi-record merging.
  */
 export default function ScanResults({
   credentials,
@@ -24,6 +25,9 @@ export default function ScanResults({
   // Pagination
   const [visibleCount, setVisibleCount] = useState(RECORDS_PER_PAGE);
   const [loadingMore, setLoadingMore] = useState(false);
+
+  // View mode: 'pairs' or 'groups'
+  const [viewMode, setViewMode] = useState('pairs');
 
   // Filters
   const [tierFilter, setTierFilter] = useState('all');
@@ -100,7 +104,7 @@ export default function ScanResults({
   // Reset visible count when filters change
   useEffect(() => {
     setVisibleCount(RECORDS_PER_PAGE);
-  }, [tierFilter, searchQuery, sortBy]);
+  }, [tierFilter, searchQuery, sortBy, viewMode]);
 
   // Filter and sort candidates
   const filteredCandidates = useMemo(() => {
@@ -139,12 +143,61 @@ export default function ScanResults({
     return result;
   }, [candidates, tierFilter, searchQuery, sortBy]);
 
+  // Filter and sort groups for group view
+  const filteredGroups = useMemo(() => {
+    let result = [...groups];
+
+    // Filter by tier (based on best tier in group)
+    if (tierFilter !== 'all') {
+      const tier = parseInt(tierFilter);
+      result = result.filter(g => g.bestTier.tier === tier);
+    }
+
+    // Filter by search query
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      result = result.filter(g =>
+        g.records.some(r =>
+          r.name.toLowerCase().includes(query) ||
+          r.record.id.toLowerCase().includes(query)
+        )
+      );
+    }
+
+    // Sort groups
+    switch (sortBy) {
+      case 'confidence':
+        result.sort((a, b) => b.highestConfidence - a.highestConfidence);
+        break;
+      case 'tier':
+        result.sort((a, b) => a.bestTier.tier - b.bestTier.tier || b.highestConfidence - a.highestConfidence);
+        break;
+      case 'name':
+        result.sort((a, b) => (a.survivor?.name || '').localeCompare(b.survivor?.name || ''));
+        break;
+    }
+
+    return result;
+  }, [groups, tierFilter, searchQuery, sortBy]);
+
+  // Groups with 3+ records (multi-record merge candidates)
+  const multiRecordGroups = useMemo(() => {
+    return filteredGroups.filter(g => g.records.length >= 3);
+  }, [filteredGroups]);
+
   // Paginated candidates for display
   const visibleCandidates = useMemo(() => {
     return filteredCandidates.slice(0, visibleCount);
   }, [filteredCandidates, visibleCount]);
 
-  const hasMore = visibleCount < filteredCandidates.length;
+  // Paginated groups for display
+  const visibleGroups = useMemo(() => {
+    return filteredGroups.slice(0, visibleCount);
+  }, [filteredGroups, visibleCount]);
+
+  const hasMore = viewMode === 'pairs'
+    ? visibleCount < filteredCandidates.length
+    : visibleCount < filteredGroups.length;
 
   const loadMore = () => {
     setLoadingMore(true);
@@ -157,10 +210,13 @@ export default function ScanResults({
 
   // Stats
   const stats = useMemo(() => {
+    const multiGroups = groups.filter(g => g.records.length >= 3);
     return {
       total: records.length,
       candidates: candidates.length,
       groups: groups.length,
+      multiRecordGroups: multiGroups.length,
+      recordsInMultiGroups: multiGroups.reduce((sum, g) => sum + g.records.length, 0),
       byTier: {
         1: candidates.filter(c => c.tier.tier === 1).length,
         2: candidates.filter(c => c.tier.tier === 2).length,
@@ -169,6 +225,36 @@ export default function ScanResults({
       },
     };
   }, [records, candidates, groups]);
+
+  // Handle selecting a group for multi-record merge
+  const handleSelectGroup = (group) => {
+    // Create a merge candidate object from the group
+    const mergeCandidate = {
+      id: group.id,
+      isGroup: true,
+      confidence: group.highestConfidence,
+      tier: group.bestTier,
+      reasons: group.matches.flatMap(m => m.reasons).filter((v, i, a) => a.indexOf(v) === i).slice(0, 5),
+      conflicts: group.matches.flatMap(m => m.conflicts || []).filter((v, i, a) => a.indexOf(v) === i),
+      survivor: group.survivor,
+      toMerge: group.toMerge,
+      // For backwards compatibility, also include 'merged' as the first toMerge
+      merged: group.toMerge[0],
+      recordCount: group.records.length,
+    };
+    onSelectCandidate && onSelectCandidate(mergeCandidate);
+  };
+
+  // Convert a single pair candidate to include toMerge array
+  const handleSelectCandidate = (candidate) => {
+    const enhancedCandidate = {
+      ...candidate,
+      isGroup: false,
+      toMerge: [candidate.merged],
+      recordCount: 2,
+    };
+    onSelectCandidate && onSelectCandidate(enhancedCandidate);
+  };
 
   return (
     <div className="scan-results">
@@ -246,6 +332,13 @@ export default function ScanResults({
       {candidates.length > 0 && (
         <div className="filter-bar">
           <div className="filter-group">
+            <label>View:</label>
+            <select value={viewMode} onChange={(e) => setViewMode(e.target.value)}>
+              <option value="pairs">Pairs ({candidates.length})</option>
+              <option value="groups">Groups ({groups.length})</option>
+            </select>
+          </div>
+          <div className="filter-group">
             <label>Tier:</label>
             <select value={tierFilter} onChange={(e) => setTierFilter(e.target.value)}>
               <option value="all">All Tiers</option>
@@ -274,8 +367,25 @@ export default function ScanResults({
         </div>
       )}
 
-      {/* Candidate List */}
-      {filteredCandidates.length > 0 && (
+      {/* Multi-record groups alert */}
+      {viewMode === 'pairs' && stats.multiRecordGroups > 0 && (
+        <div className="multi-group-alert">
+          <span className="alert-icon">🔗</span>
+          <span className="alert-text">
+            {stats.multiRecordGroups} group{stats.multiRecordGroups !== 1 ? 's' : ''} with 3+ related records detected
+            ({stats.recordsInMultiGroups} total records).
+          </span>
+          <button
+            className="btn btn-small btn-primary"
+            onClick={() => setViewMode('groups')}
+          >
+            View Groups
+          </button>
+        </div>
+      )}
+
+      {/* Candidate List (Pairs View) */}
+      {viewMode === 'pairs' && filteredCandidates.length > 0 && (
         <div className="candidate-list">
           <div className="list-header">
             <span>
@@ -288,7 +398,7 @@ export default function ScanResults({
             <div
               key={candidate.id}
               className={`candidate-row tier-${candidate.tier.tier} ${candidate.isConflict ? 'conflict' : ''}`}
-              onClick={() => onSelectCandidate && onSelectCandidate(candidate)}
+              onClick={() => handleSelectCandidate(candidate)}
             >
               <div className="candidate-tier">
                 <span
@@ -358,6 +468,92 @@ export default function ScanResults({
               </button>
               <span className="load-more-info">
                 {(filteredCandidates.length - visibleCount).toLocaleString()} remaining
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Groups View */}
+      {viewMode === 'groups' && filteredGroups.length > 0 && (
+        <div className="candidate-list group-list">
+          <div className="list-header">
+            <span>
+              Showing {visibleGroups.length.toLocaleString()} of {filteredGroups.length.toLocaleString()} groups
+              {filteredGroups.length !== groups.length && ` (${groups.length.toLocaleString()} total)`}
+            </span>
+          </div>
+
+          {visibleGroups.map(group => (
+            <div
+              key={group.id}
+              className={`candidate-row group-row tier-${group.bestTier.tier} ${group.records.length >= 3 ? 'multi-record' : ''}`}
+              onClick={() => handleSelectGroup(group)}
+            >
+              <div className="candidate-tier">
+                <span
+                  className="tier-badge"
+                  style={{ backgroundColor: group.bestTier.color }}
+                >
+                  {group.highestConfidence}%
+                </span>
+                <span className="tier-name">{group.bestTier.name}</span>
+                <span className="record-count-badge">{group.records.length} records</span>
+              </div>
+
+              <div className="candidate-records group-records">
+                <div className="record-info survivor">
+                  <span className="record-label">Keep:</span>
+                  <span className="record-name">{group.survivor?.name || 'Unknown'}</span>
+                  <span className="record-score">Score: {group.survivor?.score || 0}</span>
+                </div>
+                <div className="merge-arrow">←</div>
+                <div className="records-to-merge">
+                  {group.toMerge?.slice(0, 3).map((record, idx) => (
+                    <div key={idx} className="record-info merged">
+                      <span className="record-name">{record.name}</span>
+                      <span className="record-score">Score: {record.score}</span>
+                    </div>
+                  ))}
+                  {group.toMerge?.length > 3 && (
+                    <span className="more-records">+{group.toMerge.length - 3} more</span>
+                  )}
+                </div>
+              </div>
+
+              <div className="candidate-reasons">
+                {group.matches.slice(0, 2).flatMap(m => m.reasons).filter((v, i, a) => a.indexOf(v) === i).slice(0, 3).map((reason, idx) => (
+                  <span key={idx} className="reason-tag">{reason}</span>
+                ))}
+              </div>
+
+              <div className="candidate-action">
+                <button className="btn btn-small btn-primary">
+                  Merge All →
+                </button>
+              </div>
+            </div>
+          ))}
+
+          {/* Load More Button */}
+          {hasMore && (
+            <div className="load-more-container">
+              <button
+                className="btn btn-secondary load-more-btn"
+                onClick={loadMore}
+                disabled={loadingMore}
+              >
+                {loadingMore ? (
+                  <>
+                    <span className="btn-spinner"></span>
+                    Loading...
+                  </>
+                ) : (
+                  `Load More (${Math.min(RECORDS_PER_PAGE, filteredGroups.length - visibleCount).toLocaleString()} more)`
+                )}
+              </button>
+              <span className="load-more-info">
+                {(filteredGroups.length - visibleCount).toLocaleString()} remaining
               </span>
             </div>
           )}

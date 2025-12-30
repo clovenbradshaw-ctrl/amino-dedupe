@@ -11,7 +11,7 @@ import { AirtableClient } from '../lib/airtable.js';
 
 /**
  * MergeReview Component
- * Side-by-side diff view for reviewing and executing a merge.
+ * N-way diff view for reviewing and executing merges of 2 or more records.
  */
 export default function MergeReview({
   candidate,
@@ -32,12 +32,29 @@ export default function MergeReview({
     if (onLog) onLog(message, type);
   };
 
+  // Get the toMerge array (supports both old and new formats)
+  const toMerge = useMemo(() => {
+    if (!candidate) return [];
+    // New format: toMerge is an array
+    if (candidate.toMerge && Array.isArray(candidate.toMerge)) {
+      return candidate.toMerge;
+    }
+    // Old format: just merged as a single object
+    if (candidate.merged) {
+      return [candidate.merged];
+    }
+    return [];
+  }, [candidate]);
+
+  // Total records including survivor
+  const recordCount = toMerge.length + 1;
+  const isMultiRecord = recordCount > 2;
+
   // Compute initial field resolutions
   useEffect(() => {
     if (!candidate || !schema) return;
 
     const survivor = candidate.survivor;
-    const toMerge = [candidate.merged];
 
     const initialResolutions = computeFieldResolutions(survivor, toMerge, schema, {
       ...fieldConfig,
@@ -45,7 +62,7 @@ export default function MergeReview({
     });
 
     setResolutions(initialResolutions);
-  }, [candidate, schema, fieldConfig]);
+  }, [candidate, schema, fieldConfig, toMerge]);
 
   // Get fields that need manual decision
   const fieldsNeedingDecision = useMemo(() => {
@@ -59,8 +76,8 @@ export default function MergeReview({
     return getMergeSummary(resolutions);
   }, [resolutions]);
 
-  // Handle field selection
-  const handleFieldSelection = useCallback((fieldName, strategy, value) => {
+  // Handle field selection - supports selecting from survivor or any merged record
+  const handleFieldSelection = useCallback((fieldName, strategy, value, sourceIndex = null) => {
     setResolutions(prev => ({
       ...prev,
       [fieldName]: {
@@ -69,6 +86,7 @@ export default function MergeReview({
         value,
         needsDecision: false,
         include: true,
+        selectedSource: sourceIndex, // Track which record the value came from
       },
     }));
   }, []);
@@ -85,10 +103,10 @@ export default function MergeReview({
     try {
       const client = new AirtableClient(credentials.apiKey, credentials.baseId);
 
-      // Build merge payload
+      // Build merge payload with all records to merge
       const payload = buildMergePayload(
         candidate.survivor,
-        [candidate.merged],
+        toMerge,
         resolutions,
         schema,
         {
@@ -99,7 +117,7 @@ export default function MergeReview({
         }
       );
 
-      log(`Executing merge ${payload.mergeId}...`, 'info');
+      log(`Executing merge ${payload.mergeId} (${recordCount} records)...`, 'info');
 
       // Update survivor record
       log('Updating survivor record...', 'info');
@@ -111,7 +129,7 @@ export default function MergeReview({
       log('Survivor record updated', 'success');
 
       // Delete merged record(s)
-      log('Deleting merged record...', 'info');
+      log(`Deleting ${payload.recordsToDelete.length} merged record(s)...`, 'info');
       for (const recordId of payload.recordsToDelete) {
         await client.deleteRecord(credentials.tableName, recordId);
       }
@@ -150,19 +168,18 @@ export default function MergeReview({
   }
 
   const survivorFields = candidate.survivor.record.fields;
-  const mergedFields = candidate.merged.record.fields;
 
-  // Get all unique field names
+  // Get all unique field names across all records
   const allFieldNames = useMemo(() => {
     const names = new Set([
       ...Object.keys(survivorFields),
-      ...Object.keys(mergedFields),
+      ...toMerge.flatMap(m => Object.keys(m.record.fields)),
     ]);
     return Array.from(names).sort();
-  }, [survivorFields, mergedFields]);
+  }, [survivorFields, toMerge]);
 
   return (
-    <div className="merge-review">
+    <div className={`merge-review ${isMultiRecord ? 'multi-record' : ''}`}>
       {/* Header */}
       <div className="merge-header">
         <div className="match-info">
@@ -173,6 +190,9 @@ export default function MergeReview({
             {candidate.confidence}%
           </span>
           <span className="tier-label">{candidate.tier.name} Match</span>
+          {isMultiRecord && (
+            <span className="record-count-label">{recordCount} records</span>
+          )}
         </div>
         <div className="match-reasons">
           {candidate.reasons.map((reason, idx) => (
@@ -194,7 +214,7 @@ export default function MergeReview({
       )}
 
       {/* Record Headers */}
-      <div className="record-headers">
+      <div className={`record-headers record-count-${recordCount}`}>
         <div className="record-header survivor">
           <div className="record-title">
             <span className="record-badge keep">KEEP</span>
@@ -205,26 +225,34 @@ export default function MergeReview({
             <span>ID: {candidate.survivor.record.id}</span>
           </div>
         </div>
-        <div className="record-header merged">
-          <div className="record-title">
-            <span className="record-badge merge">MERGE</span>
-            <span className="record-name">{candidate.merged.name}</span>
+        {toMerge.map((record, idx) => (
+          <div key={record.record.id} className="record-header merged">
+            <div className="record-title">
+              <span className="record-badge merge">
+                {toMerge.length > 1 ? `MERGE ${idx + 1}` : 'MERGE'}
+              </span>
+              <span className="record-name">{record.name}</span>
+            </div>
+            <div className="record-meta">
+              <span>Score: {record.score}</span>
+              <span>ID: {record.record.id}</span>
+            </div>
           </div>
-          <div className="record-meta">
-            <span>Score: {candidate.merged.score}</span>
-            <span>ID: {candidate.merged.record.id}</span>
-          </div>
-        </div>
+        ))}
       </div>
 
       {/* Field Diff Table */}
       <div className="field-diff-container">
-        <table className="field-diff-table">
+        <table className={`field-diff-table columns-${recordCount}`}>
           <thead>
             <tr>
               <th className="field-name-col">Field</th>
-              <th className="field-value-col">Record A (Keep)</th>
-              <th className="field-value-col">Record B (Merge)</th>
+              <th className="field-value-col">Keep (A)</th>
+              {toMerge.map((_, idx) => (
+                <th key={idx} className="field-value-col">
+                  {toMerge.length > 1 ? `Merge ${idx + 1}` : 'Merge (B)'}
+                </th>
+              ))}
               <th className="field-action-col">Resolution</th>
             </tr>
           </thead>
@@ -232,16 +260,14 @@ export default function MergeReview({
             {allFieldNames.map(fieldName => {
               const resolution = resolutions[fieldName] || {};
               const valueA = survivorFields[fieldName];
-              const valueB = mergedFields[fieldName];
+              const mergedValues = toMerge.map(m => m.record.fields[fieldName]);
               const isComputed = resolution.isComputed;
               const isExcluded = resolution.isExcluded;
               const needsDecision = resolution.needsDecision;
-              const isExpanded = expandedFields.has(fieldName);
 
-              // Format values for display
-              const displayA = formatValue(valueA);
-              const displayB = formatValue(valueB);
-              const valuesMatch = JSON.stringify(valueA) === JSON.stringify(valueB);
+              // Check if all values match
+              const allValues = [valueA, ...mergedValues];
+              const allValuesMatch = allValues.every(v => JSON.stringify(v) === JSON.stringify(valueA));
 
               return (
                 <tr
@@ -250,7 +276,7 @@ export default function MergeReview({
                     ${isComputed ? 'computed' : ''}
                     ${isExcluded ? 'excluded' : ''}
                     ${needsDecision ? 'needs-decision' : ''}
-                    ${valuesMatch ? 'values-match' : 'values-differ'}
+                    ${allValuesMatch ? 'values-match' : 'values-differ'}
                   `}
                 >
                   <td className="field-name">
@@ -259,22 +285,26 @@ export default function MergeReview({
                     {isExcluded && <span className="field-badge excluded">excluded</span>}
                     {resolution.isLinkField && <span className="field-badge link">link</span>}
                   </td>
+                  {/* Survivor value column */}
                   <td className="field-value">
                     <div
-                      className={`value-cell ${resolution.strategy === RESOLUTION_STRATEGIES.KEEP_A ? 'selected' : ''}`}
-                      onClick={() => !isComputed && !isExcluded && needsDecision && handleFieldSelection(fieldName, RESOLUTION_STRATEGIES.KEEP_A, valueA)}
+                      className={`value-cell ${resolution.selectedSource === 0 || resolution.strategy === RESOLUTION_STRATEGIES.KEEP_A ? 'selected' : ''}`}
+                      onClick={() => !isComputed && !isExcluded && needsDecision && handleFieldSelection(fieldName, RESOLUTION_STRATEGIES.KEEP_A, valueA, 0)}
                     >
-                      {displayA || <span className="empty-value">(empty)</span>}
+                      {formatValue(valueA) || <span className="empty-value">(empty)</span>}
                     </div>
                   </td>
-                  <td className="field-value">
-                    <div
-                      className={`value-cell ${resolution.strategy === RESOLUTION_STRATEGIES.KEEP_B ? 'selected' : ''}`}
-                      onClick={() => !isComputed && !isExcluded && needsDecision && handleFieldSelection(fieldName, RESOLUTION_STRATEGIES.KEEP_B, valueB)}
-                    >
-                      {displayB || <span className="empty-value">(empty)</span>}
-                    </div>
-                  </td>
+                  {/* Merged record value columns */}
+                  {mergedValues.map((val, idx) => (
+                    <td key={idx} className="field-value">
+                      <div
+                        className={`value-cell ${resolution.selectedSource === idx + 1 || (idx === 0 && resolution.strategy === RESOLUTION_STRATEGIES.KEEP_B && resolution.selectedSource === undefined) ? 'selected' : ''}`}
+                        onClick={() => !isComputed && !isExcluded && needsDecision && handleFieldSelection(fieldName, `keep_merged_${idx}`, val, idx + 1)}
+                      >
+                        {formatValue(val) || <span className="empty-value">(empty)</span>}
+                      </div>
+                    </td>
+                  ))}
                   <td className="field-action">
                     {isComputed ? (
                       <span className="resolution-auto">Read-only</span>
@@ -283,17 +313,22 @@ export default function MergeReview({
                     ) : needsDecision ? (
                       <div className="decision-buttons">
                         <button
-                          className={`btn-pick ${resolution.strategy === RESOLUTION_STRATEGIES.KEEP_A ? 'active' : ''}`}
-                          onClick={() => handleFieldSelection(fieldName, RESOLUTION_STRATEGIES.KEEP_A, valueA)}
+                          className={`btn-pick ${resolution.selectedSource === 0 || resolution.strategy === RESOLUTION_STRATEGIES.KEEP_A ? 'active' : ''}`}
+                          onClick={() => handleFieldSelection(fieldName, RESOLUTION_STRATEGIES.KEEP_A, valueA, 0)}
+                          title="Keep value from survivor"
                         >
                           A
                         </button>
-                        <button
-                          className={`btn-pick ${resolution.strategy === RESOLUTION_STRATEGIES.KEEP_B ? 'active' : ''}`}
-                          onClick={() => handleFieldSelection(fieldName, RESOLUTION_STRATEGIES.KEEP_B, valueB)}
-                        >
-                          B
-                        </button>
+                        {mergedValues.map((val, idx) => (
+                          <button
+                            key={idx}
+                            className={`btn-pick ${resolution.selectedSource === idx + 1 ? 'active' : ''}`}
+                            onClick={() => handleFieldSelection(fieldName, `keep_merged_${idx}`, val, idx + 1)}
+                            title={`Use value from merge record ${idx + 1}`}
+                          >
+                            {toMerge.length > 1 ? idx + 1 : 'B'}
+                          </button>
+                        ))}
                       </div>
                     ) : resolution.strategy === RESOLUTION_STRATEGIES.AUTO ? (
                       <span className="resolution-auto">Auto</span>
@@ -303,8 +338,8 @@ export default function MergeReview({
                       <span className="resolution-concat">Concat</span>
                     ) : resolution.strategy === RESOLUTION_STRATEGIES.KEEP_A ? (
                       <span className="resolution-keep-a">← A</span>
-                    ) : resolution.strategy === RESOLUTION_STRATEGIES.KEEP_B ? (
-                      <span className="resolution-keep-b">B →</span>
+                    ) : resolution.strategy?.startsWith('keep_merged_') || resolution.strategy === RESOLUTION_STRATEGIES.KEEP_B ? (
+                      <span className="resolution-keep-b">{resolution.selectedSource !== undefined ? `← ${resolution.selectedSource}` : 'B →'}</span>
                     ) : (
                       <span className="resolution-auto">—</span>
                     )}
@@ -374,7 +409,7 @@ export default function MergeReview({
           onClick={handleMerge}
           disabled={merging || fieldsNeedingDecision.length > 0}
         >
-          {merging ? 'Merging...' : `Merge Records (Enter)`}
+          {merging ? 'Merging...' : isMultiRecord ? `Merge ${recordCount} Records (Enter)` : 'Merge Records (Enter)'}
         </button>
       </div>
 

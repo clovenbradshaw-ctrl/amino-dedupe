@@ -80,18 +80,24 @@ export default function App() {
   const handleMarkNotDuplicate = useCallback(() => {
     if (!selectedCandidate) return;
 
-    // Store in localStorage
+    // Store in localStorage - support both single and multi-record formats
     try {
       const notDuplicates = JSON.parse(localStorage.getItem('confirmed_not_duplicates') || '[]');
-      const pair = [
-        selectedCandidate.survivor.record.id,
-        selectedCandidate.merged.record.id
-      ].sort().join('|');
 
-      if (!notDuplicates.includes(pair)) {
-        notDuplicates.push(pair);
+      // Get all record IDs involved
+      const recordIds = [
+        selectedCandidate.survivor.record.id,
+        ...(selectedCandidate.toMerge || [selectedCandidate.merged]).map(r => r.record.id)
+      ].sort();
+
+      // Create a unique key for this group
+      const groupKey = recordIds.join('|');
+
+      if (!notDuplicates.includes(groupKey)) {
+        notDuplicates.push(groupKey);
         localStorage.setItem('confirmed_not_duplicates', JSON.stringify(notDuplicates));
-        addLog('Marked as not duplicate', 'success');
+        const count = recordIds.length;
+        addLog(`Marked ${count} records as not duplicates`, 'success');
       }
     } catch (e) {
       addLog('Failed to save not-duplicate marker', 'error');
