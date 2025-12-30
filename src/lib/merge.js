@@ -153,6 +153,9 @@ export function buildMergePayload(survivor, toMerge, fieldDecisions, schema, opt
     confidence: options.confidence || null,
     match_reasons: options.matchReasons || [],
     survivor_record_id: survivor.record.id,
+    // Save survivor's original state for full reconstitution on unmerge
+    survivor_field_snapshot: { ...survivor.record.fields },
+    survivor_linked_records: extractLinkedRecords(survivor.record.fields, schema),
     merged_records: toMerge.map(m => ({
       original_record_id: m.record.id,
       field_snapshot: { ...m.record.fields },
@@ -270,10 +273,21 @@ export function buildUnmergePayload(survivor, mergeId, schema) {
     };
   });
 
-  // Determine which fields on survivor need to be reverted
-  // This is complex because the survivor may have had subsequent edits
-  // For now, we'll just restore linked records that were added from merged records
+  // Restore survivor's original field values from the snapshot
+  // This allows full reconstitution of the pre-merge state
   const survivorUpdates = {};
+
+  // If we have a survivor field snapshot, restore those fields
+  if (mergeEvent.survivor_field_snapshot) {
+    Object.entries(mergeEvent.survivor_field_snapshot).forEach(([key, value]) => {
+      // Skip computed fields - they can't be written
+      if (schema.computedFields.includes(key)) return;
+      // Skip the dedupe_history field - we'll update that separately
+      if (key === 'dedupe_history') return;
+
+      survivorUpdates[key] = value;
+    });
+  }
 
   // Build history for the unmerged records
   const unmergeHistoryEntry = {
@@ -282,6 +296,9 @@ export function buildUnmergePayload(survivor, mergeId, schema) {
     action: 'unmerge',
     original_merge_id: mergeId,
     survivor_record_id: survivor.id,
+    // Save current state before unmerge for audit trail
+    pre_unmerge_snapshot: { ...survivor.fields },
+    survivor_fields_restored: !!mergeEvent.survivor_field_snapshot,
     restored_records: mergeEvent.merged_records.map(m => m.original_record_id),
     performed_by: 'user',
     notes: `Unmerge of ${mergeId}`,

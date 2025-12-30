@@ -328,6 +328,29 @@ function HistoryEvent({ event, isLatest, onUnmerge }) {
             </div>
           )}
 
+          {/* Survivor's Original State */}
+          {event.survivor_field_snapshot && (
+            <div className="detail-section">
+              <h5>Survivor's Original State</h5>
+              <div className="merged-record">
+                <div className="merged-record-header">
+                  <span className="record-id">{event.survivor_record_id}</span>
+                  <span className="record-label">(survivor - preserved for unmerge)</span>
+                </div>
+                <details className="field-snapshot">
+                  <summary>Field Snapshot ({Object.keys(event.survivor_field_snapshot).length} fields)</summary>
+                  <pre>{JSON.stringify(event.survivor_field_snapshot, null, 2)}</pre>
+                </details>
+                {event.survivor_linked_records && Object.keys(event.survivor_linked_records).length > 0 && (
+                  <details className="linked-records">
+                    <summary>Linked Records</summary>
+                    <pre>{JSON.stringify(event.survivor_linked_records, null, 2)}</pre>
+                  </details>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Merged Records */}
           {event.merged_records && event.merged_records.length > 0 && (
             <div className="detail-section">
