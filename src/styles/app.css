@@ -432,10 +432,47 @@ textarea:disabled {
 .stat-card.tier-4 .stat-number { color: var(--tier-4); }
 
 /* ============================================
-   Progress Bar
+   Loading Animation & Progress
    ============================================ */
-.progress-container {
+.loading-container {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-lg);
+  padding: var(--spacing-xl);
   margin: var(--spacing-lg) 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+}
+
+.loading-spinner {
+  flex-shrink: 0;
+}
+
+.spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid var(--bg-input);
+  border-top-color: var(--accent-primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.loading-details {
+  flex: 1;
+}
+
+.loading-phase {
+  font-size: 1.1rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-sm);
 }
 
 .progress-bar {
@@ -448,14 +485,61 @@ textarea:disabled {
 .progress-fill {
   height: 100%;
   background: linear-gradient(90deg, var(--accent-primary), var(--success));
-  transition: width 0.3s;
+  transition: width 0.3s ease-out;
+  animation: shimmer 2s ease-in-out infinite;
+  background-size: 200% 100%;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
 }
 
 .progress-text {
-  text-align: center;
+  text-align: left;
   color: var(--text-secondary);
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   margin-top: var(--spacing-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Button spinner for inline loading */
+.btn-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-right: var(--spacing-sm);
+  vertical-align: middle;
+}
+
+/* Load More Section */
+.load-more-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-lg);
+  margin-top: var(--spacing-md);
+}
+
+.load-more-btn {
+  min-width: 200px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.load-more-info {
+  font-size: 0.85rem;
+  color: var(--text-muted);
 }
 
 /* ============================================
