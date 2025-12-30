@@ -2237,3 +2237,234 @@ textarea:disabled {
     flex-direction: column;
   }
 }
+
+/* ============================================
+   Quick Selection Bar
+   ============================================ */
+.quick-select-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md);
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--spacing-md);
+  flex-wrap: wrap;
+}
+
+.quick-select-label {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.quick-select-buttons {
+  display: flex;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
+}
+
+.btn-auto-merge {
+  background: linear-gradient(135deg, var(--success), var(--success-hover));
+  color: white;
+  font-weight: 500;
+}
+
+.btn-auto-merge:hover {
+  opacity: 0.9;
+}
+
+.tier-1-btn {
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid var(--tier-1);
+  color: var(--tier-1);
+}
+
+.tier-1-btn:hover {
+  background: rgba(16, 185, 129, 0.25);
+}
+
+.tier-2-btn {
+  background: rgba(99, 102, 241, 0.15);
+  border: 1px solid var(--tier-2);
+  color: var(--tier-2);
+}
+
+.tier-2-btn:hover {
+  background: rgba(99, 102, 241, 0.25);
+}
+
+.tier-3-btn {
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid var(--tier-3);
+  color: var(--tier-3);
+}
+
+.tier-3-btn:hover {
+  background: rgba(245, 158, 11, 0.25);
+}
+
+/* ============================================
+   Bulk Merge Summary Phase
+   ============================================ */
+.bulk-merge-summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xl);
+}
+
+.summary-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--spacing-lg);
+}
+
+.summary-stat {
+  padding: var(--spacing-lg);
+  border-radius: var(--radius-lg);
+  text-align: center;
+}
+
+.summary-stat.auto-merge {
+  background: rgba(16, 185, 129, 0.1);
+  border: 2px solid var(--success);
+}
+
+.summary-stat.conflicts {
+  background: rgba(245, 158, 11, 0.1);
+  border: 2px solid var(--warning);
+}
+
+.summary-stat .stat-number {
+  font-size: 3rem;
+  font-weight: bold;
+  line-height: 1;
+  margin-bottom: var(--spacing-sm);
+}
+
+.summary-stat.auto-merge .stat-number {
+  color: var(--success);
+}
+
+.summary-stat.conflicts .stat-number {
+  color: var(--warning);
+}
+
+.summary-stat .stat-label {
+  font-size: 1.1rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-xs);
+}
+
+.summary-stat .stat-desc {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.summary-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.summary-actions h3 {
+  color: var(--text-secondary);
+  font-size: 1rem;
+  margin-bottom: var(--spacing-sm);
+}
+
+.action-option {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md);
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+}
+
+.action-option.primary-action {
+  background: rgba(16, 185, 129, 0.05);
+  border-color: var(--success);
+}
+
+.action-option.secondary {
+  background: var(--bg-input);
+  border-style: dashed;
+}
+
+.action-option .btn {
+  flex-shrink: 0;
+  min-width: 180px;
+}
+
+.action-desc {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.action-divider {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.action-divider::before,
+.action-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border-color);
+}
+
+.no-candidates {
+  text-align: center;
+  padding: var(--spacing-xl);
+  color: var(--text-secondary);
+}
+
+/* Large button variant */
+.btn-large {
+  padding: var(--spacing-md) var(--spacing-xl);
+  font-size: 1rem;
+}
+
+/* Conflict actions layout */
+.conflict-actions-left {
+  display: flex;
+  gap: var(--spacing-sm);
+}
+
+@media (max-width: 640px) {
+  .summary-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .action-option {
+    flex-direction: column;
+    align-items: stretch;
+    text-align: center;
+  }
+
+  .action-option .btn {
+    width: 100%;
+  }
+
+  .quick-select-bar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .conflict-actions-left {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .conflict-actions-left .btn {
+    width: 100%;
+  }
+}
