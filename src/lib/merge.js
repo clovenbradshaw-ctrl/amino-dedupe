@@ -35,7 +35,7 @@ export const DEFAULT_RESOLUTION_CONFIG = {
   linkFields: ['Case Master View', 'Events', 'Relationships', 'Matters', 'Client Notes'],
 
   // Fields to exclude from merge entirely
-  excludeFields: ['Box_Folder_ID', 'box_shared_link', 'Box Legacy ID'],
+  excludeFields: ['Box Legacy ID'],
 
   // Delimiter for concatenation
   concatenateDelimiter: ' | ',

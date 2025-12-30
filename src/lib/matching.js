@@ -41,8 +41,6 @@ export const DEFAULT_FIELD_CONFIG = {
 
   // Fields to exclude from merging (computed, system, or special handling)
   excludeFromMerge: [
-    'Box_Folder_ID',
-    'box_shared_link',
     'Box Legacy ID',
   ],
 
