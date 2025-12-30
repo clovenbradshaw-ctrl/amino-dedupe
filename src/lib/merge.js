@@ -34,8 +34,14 @@ export const DEFAULT_RESOLUTION_CONFIG = {
   // Fields that should merge linked record arrays
   linkFields: ['Case Master View', 'Events', 'Relationships', 'Matters', 'Client Notes'],
 
-  // Fields to exclude from merge entirely
-  excludeFields: ['Box Legacy ID'],
+  // Fields to exclude from merge entirely (includes timestamp/metadata fields)
+  excludeFields: [
+    'Box Legacy ID',
+    'Created At',
+    'Created Q Single Select',
+    'Email Imported',
+    'Xano Last Updated',
+  ],
 
   // Delimiter for concatenation
   concatenateDelimiter: ' | ',
