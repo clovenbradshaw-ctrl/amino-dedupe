@@ -266,12 +266,40 @@ export default function ScanResults({
     setSelectedIds(new Set());
   };
 
+  // Select by tier
+  const selectByTier = (tier) => {
+    const tierIds = new Set(
+      visibleCandidates.filter(c => c.tier.tier === tier).map(c => c.id)
+    );
+    setSelectedIds(prev => {
+      const newSet = new Set(prev);
+      tierIds.forEach(id => newSet.add(id));
+      return newSet;
+    });
+  };
+
+  // Select only auto-mergeable candidates (no conflicts requiring decisions)
+  const selectAutoMergeable = () => {
+    // Filter to tier 1 and 2 which typically don't require manual intervention
+    const autoMergeIds = new Set(
+      visibleCandidates
+        .filter(c => c.tier.tier <= 2 && !c.isConflict)
+        .map(c => c.id)
+    );
+    setSelectedIds(autoMergeIds);
+  };
+
   const isAllSelected = visibleCandidates.length > 0 &&
     visibleCandidates.every(c => selectedIds.has(c.id));
 
   const selectedCandidates = useMemo(() => {
     return candidates.filter(c => selectedIds.has(c.id));
   }, [candidates, selectedIds]);
+
+  // Count auto-mergeable in current selection
+  const autoMergeableCount = useMemo(() => {
+    return visibleCandidates.filter(c => c.tier.tier <= 2 && !c.isConflict).length;
+  }, [visibleCandidates]);
 
   // Handle bulk merge completion
   const handleBulkMergeComplete = (results) => {
@@ -445,6 +473,48 @@ export default function ScanResults({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
+          </div>
+        </div>
+      )}
+
+      {/* Quick Selection Bar */}
+      {candidates.length > 0 && (
+        <div className="quick-select-bar">
+          <span className="quick-select-label">Quick Select:</span>
+          <div className="quick-select-buttons">
+            {autoMergeableCount > 0 && (
+              <button
+                className="btn btn-small btn-auto-merge"
+                onClick={selectAutoMergeable}
+                title="Select candidates that can be merged automatically (Tier 1 & 2, no conflicts)"
+              >
+                Auto-Mergeable ({autoMergeableCount})
+              </button>
+            )}
+            {stats.byTier[1] > 0 && (
+              <button
+                className="btn btn-small tier-1-btn"
+                onClick={() => selectByTier(1)}
+              >
+                + Tier 1 ({stats.byTier[1]})
+              </button>
+            )}
+            {stats.byTier[2] > 0 && (
+              <button
+                className="btn btn-small tier-2-btn"
+                onClick={() => selectByTier(2)}
+              >
+                + Tier 2 ({stats.byTier[2]})
+              </button>
+            )}
+            {stats.byTier[3] > 0 && (
+              <button
+                className="btn btn-small tier-3-btn"
+                onClick={() => selectByTier(3)}
+              >
+                + Tier 3 ({stats.byTier[3]})
+              </button>
+            )}
           </div>
         </div>
       )}
