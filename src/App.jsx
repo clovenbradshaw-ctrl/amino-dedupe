@@ -25,6 +25,9 @@ export default function App() {
   const [logs, setLogs] = useState([]);
   const logRef = useRef(null);
 
+  // Resync function ref - ScanResults will register its resync function here
+  const resyncFnRef = useRef(null);
+
   // Add log entry
   const addLog = useCallback((message, type = 'info') => {
     const timestamp = new Date().toLocaleTimeString();
@@ -37,6 +40,20 @@ export default function App() {
       logRef.current.scrollTop = logRef.current.scrollHeight;
     }
   }, [logs]);
+
+  // Register resync function from ScanResults
+  const handleResyncReady = useCallback((resyncFn) => {
+    resyncFnRef.current = resyncFn;
+  }, []);
+
+  // Trigger background resync with Airtable
+  const triggerBackgroundResync = useCallback(() => {
+    if (resyncFnRef.current) {
+      addLog('Starting background resync with Airtable...', 'info');
+      // Run resync in background (non-blocking)
+      resyncFnRef.current();
+    }
+  }, [addLog]);
 
   // Handle setup completion
   const handleSetupComplete = useCallback((data) => {
@@ -68,7 +85,9 @@ export default function App() {
     addLog(`Merge completed: ${result.mergeId}`, 'success');
     setSelectedCandidate(null);
     setCurrentView('scan');
-  }, [addLog]);
+    // Trigger background resync with Airtable
+    triggerBackgroundResync();
+  }, [addLog, triggerBackgroundResync]);
 
   // Handle skip during review
   const handleSkip = useCallback(() => {
@@ -110,7 +129,9 @@ export default function App() {
   const handleUnmergeComplete = useCallback((result) => {
     addLog(`Unmerge completed: ${result.unmergeId}`, 'success');
     setUnmergeTarget(null);
-  }, [addLog]);
+    // Trigger background resync with Airtable
+    triggerBackgroundResync();
+  }, [addLog, triggerBackgroundResync]);
 
   // Handle unmerge cancel
   const handleUnmergeCancel = useCallback(() => {
@@ -183,6 +204,7 @@ export default function App() {
             schema={schema}
             fieldConfig={fieldConfig}
             onSelectCandidate={handleSelectCandidate}
+            onResyncReady={handleResyncReady}
             onLog={addLog}
           />
         );

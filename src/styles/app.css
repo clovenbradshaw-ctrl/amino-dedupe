@@ -2237,3 +2237,30 @@ textarea:disabled {
     flex-direction: column;
   }
 }
+
+/* ============================================
+   Background Sync Indicator
+   ============================================ */
+.background-sync-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  margin-left: var(--spacing-md);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background: rgba(99, 102, 241, 0.1);
+  border: 1px solid var(--accent-primary);
+  border-radius: var(--radius-sm);
+  color: var(--accent-primary);
+  font-size: 0.8rem;
+  animation: fadeIn 0.3s ease-out;
+}
+
+.sync-spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(99, 102, 241, 0.3);
+  border-top-color: var(--accent-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}

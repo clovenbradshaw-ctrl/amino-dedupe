@@ -15,9 +15,11 @@ export default function ScanResults({
   schema,
   fieldConfig,
   onSelectCandidate,
+  onResyncReady,
   onLog,
 }) {
   const [loading, setLoading] = useState(false);
+  const [backgroundSyncing, setBackgroundSyncing] = useState(false);
   const [records, setRecords] = useState([]);
   const [candidates, setCandidates] = useState([]);
   const [groups, setGroups] = useState([]);
@@ -118,6 +120,63 @@ export default function ScanResults({
     }
   };
 
+  // Background resync - runs without blocking the UI
+  const runBackgroundResync = async () => {
+    // Don't run if already scanning or syncing
+    if (loading || backgroundSyncing) {
+      log('Resync skipped - scan already in progress', 'info');
+      return;
+    }
+
+    // Only run if we have previously loaded records
+    if (records.length === 0) {
+      log('Resync skipped - no records loaded yet', 'info');
+      return;
+    }
+
+    setBackgroundSyncing(true);
+
+    try {
+      const client = new AirtableClient(credentials.apiKey, credentials.baseId);
+
+      log('Background resync: Fetching records...', 'info');
+      const allRecords = await client.getAllRecords(credentials.tableName, {
+        onRecords: (newRecords, allSoFar) => {
+          // Update records progressively as they stream in
+          recordsRef.current = allSoFar;
+          setRecords([...allSoFar]);
+        },
+      });
+
+      log(`Background resync: Fetched ${allRecords.length} records`, 'success');
+
+      // Find duplicate candidates
+      log('Background resync: Analyzing for duplicates...', 'info');
+
+      const duplicateCandidates = findDuplicateCandidates(allRecords, fieldConfig);
+      setCandidates(duplicateCandidates);
+      log(`Background resync: Found ${duplicateCandidates.length} potential duplicates`, 'success');
+
+      // Group related candidates
+      const groupedCandidates = groupCandidates(duplicateCandidates);
+      setGroups(groupedCandidates);
+
+      log('Background resync completed', 'success');
+
+    } catch (err) {
+      log(`Background resync failed: ${err.message}`, 'error');
+    } finally {
+      setBackgroundSyncing(false);
+    }
+  };
+
+  // Register resync function with parent
+  useEffect(() => {
+    if (onResyncReady) {
+      onResyncReady(runBackgroundResync);
+    }
+  }, [onResyncReady, credentials, fieldConfig]);
+
   // Reset visible count when filters change
   useEffect(() => {
     setVisibleCount(RECORDS_PER_PAGE);
@@ -212,8 +271,8 @@ export default function ScanResults({
         results.failed > 0 ? 'warning' : 'success');
     setShowBulkMergeModal(false);
     setSelectedIds(new Set());
-    // Trigger a re-scan to refresh the list
-    runScan();
+    // Trigger background resync to refresh the list
+    runBackgroundResync();
   };
 
   const handleBulkMergeCancel = () => {
@@ -245,14 +304,20 @@ export default function ScanResults({
             {records.length > 0
               ? `Analyzing ${records.length} records`
               : 'Click scan to analyze your records'}
+            {backgroundSyncing && (
+              <span className="background-sync-indicator">
+                <span className="sync-spinner"></span>
+                Syncing...
+              </span>
+            )}
           </p>
         </div>
         <button
           className="btn btn-primary"
           onClick={runScan}
-          disabled={loading}
+          disabled={loading || backgroundSyncing}
         >
-          {loading ? 'Scanning...' : records.length > 0 ? 'Re-scan' : 'Start Scan'}
+          {loading ? 'Scanning...' : backgroundSyncing ? 'Syncing...' : records.length > 0 ? 'Re-scan' : 'Start Scan'}
         </button>
       </div>
 
