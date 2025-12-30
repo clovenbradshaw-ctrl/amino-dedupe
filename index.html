@@ -963,27 +963,29 @@ function MergeReviewModal({ candidate, schema, credentials, onComplete, onSkip, 
                     {isExcluded && <span style={{ fontSize: '0.7em', marginLeft: '5px', color: '#f59e0b' }}>(excluded)</span>}
                   </div>
                   <div
-                    className={`diff-cell ${isSame ? 'same' : 'different'} ${decision.strategy === 'keep_a' ? 'selected' : ''} ${decision.needsDecision ? 'clickable' : ''}`}
-                    onClick={() => decision.needsDecision && handlePick(fieldName, 'keep_a')}
+                    className={`diff-cell ${isSame ? 'same' : 'different'} ${decision.strategy === 'keep_a' ? 'selected' : ''} ${!isSame && !isComputed && !isExcluded ? 'clickable' : ''}`}
+                    onClick={() => !isSame && !isComputed && !isExcluded && handlePick(fieldName, 'keep_a')}
                   >
                     {dispA || <span className="empty-value">(empty)</span>}
                   </div>
                   <div
-                    className={`diff-cell ${isSame ? 'same' : 'different'} ${decision.strategy === 'keep_b' ? 'selected' : ''} ${decision.needsDecision ? 'clickable' : ''}`}
-                    onClick={() => decision.needsDecision && handlePick(fieldName, 'keep_b')}
+                    className={`diff-cell ${isSame ? 'same' : 'different'} ${decision.strategy === 'keep_b' ? 'selected' : ''} ${!isSame && !isComputed && !isExcluded ? 'clickable' : ''}`}
+                    onClick={() => !isSame && !isComputed && !isExcluded && handlePick(fieldName, 'keep_b')}
                   >
                     {dispB || <span className="empty-value">(empty)</span>}
                   </div>
                   <div className="diff-cell">
                     {isComputed || isExcluded ? (
                       <span style={{ color: '#64748b', fontSize: '0.8em' }}>Skip</span>
-                    ) : decision.needsDecision ? (
+                    ) : isSame ? (
+                      <span className="pick-btn auto">Auto</span>
+                    ) : decision.strategy === 'merge' ? (
+                      <span className="pick-btn auto">Merged</span>
+                    ) : (
                       <div className="pick-buttons">
                         <button className={`pick-btn ${decision.strategy === 'keep_a' ? 'active' : ''}`} onClick={() => handlePick(fieldName, 'keep_a')}>A</button>
                         <button className={`pick-btn ${decision.strategy === 'keep_b' ? 'active' : ''}`} onClick={() => handlePick(fieldName, 'keep_b')}>B</button>
                       </div>
-                    ) : (
-                      <span className="pick-btn auto">{decision.strategy === 'merge' ? 'Merged' : decision.strategy === 'auto' ? 'Auto' : decision.strategy === 'keep_a' ? '← A' : 'B →'}</span>
                     )}
                   </div>
                 </div>
