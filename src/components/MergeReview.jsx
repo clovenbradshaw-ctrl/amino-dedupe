@@ -26,7 +26,6 @@ export default function MergeReview({
   const [resolutions, setResolutions] = useState({});
   const [merging, setMerging] = useState(false);
   const [notes, setNotes] = useState('');
-  const [expandedFields, setExpandedFields] = useState(new Set());
 
   const log = (message, type = 'info') => {
     if (onLog) onLog(message, type);
