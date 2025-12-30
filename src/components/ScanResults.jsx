@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { AirtableClient } from '../lib/airtable.js';
 import { findDuplicateCandidates, groupCandidates, MATCH_TIERS } from '../lib/matching.js';
+import BulkMergeModal from './BulkMergeModal.jsx';
 
 const RECORDS_PER_PAGE = 300;
 
@@ -21,6 +22,10 @@ export default function ScanResults({
   const [candidates, setCandidates] = useState([]);
   const [groups, setGroups] = useState([]);
   const [progress, setProgress] = useState({ phase: '', current: 0, total: 0, hasMore: false, delay: 200 });
+
+  // Bulk selection state
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [showBulkMergeModal, setShowBulkMergeModal] = useState(false);
 
   // Pagination
   const [visibleCount, setVisibleCount] = useState(RECORDS_PER_PAGE);
@@ -169,6 +174,50 @@ export default function ScanResults({
       setVisibleCount(prev => prev + RECORDS_PER_PAGE);
       setLoadingMore(false);
     }, 300);
+  };
+
+  // Bulk selection handlers
+  const toggleSelect = (candidateId, event) => {
+    event.stopPropagation();
+    setSelectedIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(candidateId)) {
+        newSet.delete(candidateId);
+      } else {
+        newSet.add(candidateId);
+      }
+      return newSet;
+    });
+  };
+
+  const selectAll = () => {
+    const allVisibleIds = new Set(visibleCandidates.map(c => c.id));
+    setSelectedIds(allVisibleIds);
+  };
+
+  const deselectAll = () => {
+    setSelectedIds(new Set());
+  };
+
+  const isAllSelected = visibleCandidates.length > 0 &&
+    visibleCandidates.every(c => selectedIds.has(c.id));
+
+  const selectedCandidates = useMemo(() => {
+    return candidates.filter(c => selectedIds.has(c.id));
+  }, [candidates, selectedIds]);
+
+  // Handle bulk merge completion
+  const handleBulkMergeComplete = (results) => {
+    log(`Bulk merge completed: ${results.successful} successful, ${results.failed} failed`,
+        results.failed > 0 ? 'warning' : 'success');
+    setShowBulkMergeModal(false);
+    setSelectedIds(new Set());
+    // Trigger a re-scan to refresh the list
+    runScan();
+  };
+
+  const handleBulkMergeCancel = () => {
+    setShowBulkMergeModal(false);
   };
 
   // Stats
@@ -325,10 +374,38 @@ export default function ScanResults({
         </div>
       )}
 
+      {/* Bulk Action Bar */}
+      {selectedIds.size > 0 && (
+        <div className="bulk-action-bar">
+          <div className="bulk-info">
+            <span className="bulk-count">{selectedIds.size}</span> selected
+          </div>
+          <div className="bulk-actions">
+            <button className="btn btn-secondary btn-small" onClick={deselectAll}>
+              Clear Selection
+            </button>
+            <button
+              className="btn btn-success"
+              onClick={() => setShowBulkMergeModal(true)}
+            >
+              Bulk Merge ({selectedIds.size})
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Candidate List */}
       {filteredCandidates.length > 0 && (
         <div className="candidate-list">
           <div className="list-header">
+            <label className="select-all-checkbox" onClick={(e) => e.stopPropagation()}>
+              <input
+                type="checkbox"
+                checked={isAllSelected}
+                onChange={() => isAllSelected ? deselectAll() : selectAll()}
+              />
+              <span>Select All</span>
+            </label>
             <span>
               Showing {visibleCandidates.length.toLocaleString()} of {filteredCandidates.length.toLocaleString()} matches
               {filteredCandidates.length !== candidates.length && ` (${candidates.length.toLocaleString()} total)`}
@@ -338,9 +415,17 @@ export default function ScanResults({
           {visibleCandidates.map(candidate => (
             <div
               key={candidate.id}
-              className={`candidate-row tier-${candidate.tier.tier} ${candidate.isConflict ? 'conflict' : ''}`}
+              className={`candidate-row tier-${candidate.tier.tier} ${candidate.isConflict ? 'conflict' : ''} ${selectedIds.has(candidate.id) ? 'selected' : ''}`}
               onClick={() => onSelectCandidate && onSelectCandidate(candidate)}
             >
+              <div className="candidate-checkbox" onClick={(e) => toggleSelect(candidate.id, e)}>
+                <input
+                  type="checkbox"
+                  checked={selectedIds.has(candidate.id)}
+                  onChange={() => {}}
+                />
+              </div>
+
               <div className="candidate-tier">
                 <span
                   className="tier-badge"
@@ -430,6 +515,19 @@ export default function ScanResults({
           <h3>Ready to Scan</h3>
           <p>Click "Start Scan" to analyze your records for duplicates.</p>
         </div>
+      )}
+
+      {/* Bulk Merge Modal */}
+      {showBulkMergeModal && (
+        <BulkMergeModal
+          candidates={selectedCandidates}
+          schema={schema}
+          credentials={credentials}
+          fieldConfig={fieldConfig}
+          onComplete={handleBulkMergeComplete}
+          onCancel={handleBulkMergeCancel}
+          onLog={log}
+        />
       )}
     </div>
   );
