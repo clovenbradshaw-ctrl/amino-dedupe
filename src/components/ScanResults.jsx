@@ -41,6 +41,9 @@ export default function ScanResults({
   // Ref for stable callback
   const recordsRef = useRef([]);
 
+  // Ref to hold the latest resync function (avoids stale closure issues)
+  const resyncFnRef = useRef(null);
+
   const log = (message, type = 'info') => {
     if (onLog) onLog(message, type);
   };
@@ -121,7 +124,8 @@ export default function ScanResults({
   };
 
   // Background resync - runs without blocking the UI
-  const runBackgroundResync = async () => {
+  // Store in ref to always have latest version available
+  resyncFnRef.current = async () => {
     // Don't run if already scanning or syncing
     if (loading || backgroundSyncing) {
       log('Resync skipped - scan already in progress', 'info');
@@ -129,7 +133,7 @@ export default function ScanResults({
     }
 
     // Only run if we have previously loaded records
-    if (records.length === 0) {
+    if (recordsRef.current.length === 0) {
       log('Resync skipped - no records loaded yet', 'info');
       return;
     }
@@ -170,12 +174,16 @@ export default function ScanResults({
     }
   };
 
-  // Register resync function with parent
+  // Register a stable wrapper function with parent that calls the latest resync
   useEffect(() => {
     if (onResyncReady) {
-      onResyncReady(runBackgroundResync);
+      onResyncReady(() => {
+        if (resyncFnRef.current) {
+          resyncFnRef.current();
+        }
+      });
     }
-  }, [onResyncReady, credentials, fieldConfig]);
+  }, [onResyncReady]);
 
   // Reset visible count when filters change
   useEffect(() => {
@@ -272,7 +280,9 @@ export default function ScanResults({
     setShowBulkMergeModal(false);
     setSelectedIds(new Set());
     // Trigger background resync to refresh the list
-    runBackgroundResync();
+    if (resyncFnRef.current) {
+      resyncFnRef.current();
+    }
   };
 
   const handleBulkMergeCancel = () => {
