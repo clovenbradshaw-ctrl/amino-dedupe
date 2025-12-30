@@ -595,14 +595,15 @@ const scoreMatch = (recordA, recordB) => {
   const fa = recordA.fields || {}, fb = recordB.fields || {};
   const reasons = [], conflicts = [];
   let confidence = 0;
+  let hasIdMatch = false;
 
-  // Tier 1: Exact ID matches
+  // Check for ID conflicts first
   const idFields = ['PPID', 'clio_contact_id', 'A#'];
   for (const field of idFields) {
     if (fa[field] && fb[field]) {
       if (fa[field] === fb[field]) {
         reasons.push(`${field} exact`);
-        confidence = 100;
+        hasIdMatch = true;
       } else {
         conflicts.push(`${field}: "${fa[field]}" vs "${fb[field]}"`);
       }
@@ -610,24 +611,32 @@ const scoreMatch = (recordA, recordB) => {
   }
 
   if (conflicts.length > 0) {
-    return { tier: MATCH_TIERS.TIER4, confidence: Math.max(confidence, 50), reasons, conflicts, isConflict: true };
-  }
-  if (confidence >= 100) {
-    return { tier: MATCH_TIERS.TIER1, confidence: 100, reasons, conflicts, isConflict: false };
+    return { tier: MATCH_TIERS.TIER4, confidence: 50, reasons, conflicts, isConflict: true };
   }
 
-  // Name matching
+  // TIER 1: Full name exact match (100%)
   const nameA = [fa['First Name'], fa['Family Name']].filter(Boolean).join(' ') || fa['Client Name'];
   const nameB = [fb['First Name'], fb['Family Name']].filter(Boolean).join(' ') || fb['Client Name'];
   if (nameA && nameB) {
     const nameMatch = areNamesRelated(nameA, nameB);
     if (nameMatch.match) {
       reasons.push(`Name ${nameMatch.score}% (${nameMatch.reason})`);
-      confidence = Math.max(confidence, nameMatch.score);
+      confidence = nameMatch.score;
+
+      // Exact full name match is Tier 1 (Definitive)
+      if (nameMatch.score === 100 && nameMatch.reason === 'exact') {
+        return { tier: MATCH_TIERS.TIER1, confidence: 100, reasons, conflicts, isConflict: false };
+      }
     }
   }
 
-  // Corroborating fields
+  // TIER 2: PPID/ID exact match OR name match with corroboration
+  if (hasIdMatch) {
+    confidence = Math.max(confidence, 90);
+    // ID match alone is strong but not definitive
+  }
+
+  // Corroborating fields boost confidence
   let corroboration = 0;
   const phoneA = normalizePhone(fa['Phone Number']), phoneB = normalizePhone(fb['Phone Number']);
   if (phoneA && phoneB && phoneA.length >= 10 && phoneA === phoneB) {
@@ -649,12 +658,15 @@ const scoreMatch = (recordA, recordB) => {
     confidence = Math.min(100, confidence + 10);
   }
 
-  // Determine tier
+  // Determine tier (PPID/ID matches are Tier 2, not Tier 1)
   let tier;
-  if (confidence >= 100) tier = MATCH_TIERS.TIER1;
-  else if (confidence >= 85 || (confidence >= 75 && corroboration >= 1)) tier = MATCH_TIERS.TIER2;
-  else if (confidence >= 70) tier = MATCH_TIERS.TIER3;
-  else tier = MATCH_TIERS.TIER3;
+  if (hasIdMatch || confidence >= 85 || (confidence >= 75 && corroboration >= 1)) {
+    tier = MATCH_TIERS.TIER2;
+  } else if (confidence >= 70) {
+    tier = MATCH_TIERS.TIER3;
+  } else {
+    tier = MATCH_TIERS.TIER3;
+  }
 
   return { tier, confidence: Math.round(Math.max(confidence, 70)), reasons, conflicts, isConflict: false };
 };
