@@ -1663,6 +1663,7 @@ function MainApp({ accessLevel, onLogout }) {
   const [activeTab, setActiveTab] = useState('scan');
   const [tierFilter, setTierFilter] = useState('all');
   const [searchFilter, setSearchFilter] = useState('');
+  const [bahrFilter, setBahrFilter] = useState('all');
 
   const logRef = useRef(null);
   const isBahrOnly = accessLevel === 'bahr';
@@ -1725,6 +1726,13 @@ function MainApp({ accessLevel, onLogout }) {
   const filteredCandidates = useMemo(() => {
     let result = [...candidates];
     if (tierFilter !== 'all') result = result.filter(c => c.tier.tier === parseInt(tierFilter));
+    if (bahrFilter !== 'all') {
+      const isBahr = bahrFilter === 'yes';
+      result = result.filter(c => {
+        const hasBahr = c.survivor.record.fields['Bahr Client'] || c.merged.record.fields['Bahr Client'];
+        return isBahr ? hasBahr : !hasBahr;
+      });
+    }
     if (searchFilter.trim()) {
       const q = searchFilter.toLowerCase();
       result = result.filter(c =>
@@ -1735,7 +1743,7 @@ function MainApp({ accessLevel, onLogout }) {
       );
     }
     return result;
-  }, [candidates, tierFilter, searchFilter]);
+  }, [candidates, tierFilter, bahrFilter, searchFilter]);
 
   const stats = useMemo(() => ({
     total: allRecords.length,
@@ -1810,6 +1818,11 @@ function MainApp({ accessLevel, onLogout }) {
                   <option value="3">Tier 3 - Possible</option>
                   <option value="4">Tier 4 - Conflicts</option>
                 </select>
+                <select value={bahrFilter} onChange={e => setBahrFilter(e.target.value)}>
+                  <option value="all">All Clients</option>
+                  <option value="yes">Bahr Clients Only</option>
+                  <option value="no">Non-Bahr Clients Only</option>
+                </select>
                 <input type="text" value={searchFilter} onChange={e => setSearchFilter(e.target.value)} placeholder="Search by name or ID..." />
               </div>
               <div className="table-container">
@@ -1817,6 +1830,7 @@ function MainApp({ accessLevel, onLogout }) {
                   <thead>
                     <tr>
                       <th>Confidence</th>
+                      <th>Bahr Client</th>
                       <th>Keep (Record A)</th>
                       <th>Merge (Record B)</th>
                       <th>Match Reasons</th>
@@ -1829,6 +1843,13 @@ function MainApp({ accessLevel, onLogout }) {
                         <td>
                           <span className={`badge tier${c.tier.tier}`}>{c.confidence}%</span>
                           <div style={{ fontSize: '0.75em', color: '#94a3b8' }}>{c.tier.name}</div>
+                        </td>
+                        <td>
+                          {(c.survivor.record.fields['Bahr Client'] || c.merged.record.fields['Bahr Client']) ? (
+                            <span style={{ background: '#6366f1', color: 'white', padding: '2px 8px', borderRadius: '4px', fontSize: '0.8em' }}>Yes</span>
+                          ) : (
+                            <span style={{ color: '#64748b', fontSize: '0.8em' }}>No</span>
+                          )}
                         </td>
                         <td>
                           <div style={{ fontWeight: '500' }}>{c.survivor.name}</div>
