@@ -14,6 +14,9 @@ import {
 
 const RECORDS_PER_PAGE = 100;
 
+// Case Master View table ID
+const CASE_MASTER_VIEW_TABLE_ID = 'tblgynOzESGvAXAsK';
+
 /**
  * Case Master View Deduplication Component
  *
@@ -51,8 +54,8 @@ export default function CaseMasterDedup({
   // Field detection
   const [editableFields, setEditableFields] = useState(null);
 
-  // Table selection (defaults to Case Master View)
-  const [tableName, setTableName] = useState('Case Master View');
+  // Table selection (defaults to Case Master View table ID)
+  const [tableName, setTableName] = useState(CASE_MASTER_VIEW_TABLE_ID);
   const [availableTables, setAvailableTables] = useState([]);
 
   const log = (message, type = 'info') => {
@@ -67,7 +70,15 @@ export default function CaseMasterDedup({
       try {
         const client = new AirtableClient(credentials.apiKey, credentials.baseId);
         const result = await client.request(client.metaUrl);
-        setAvailableTables(result.tables.map(t => t.name));
+        // Store both id and name for each table
+        setAvailableTables(result.tables.map(t => ({ id: t.id, name: t.name })));
+
+        // Find Case Master View table and set it as default if found
+        const caseMasterTable = result.tables.find(t => t.id === CASE_MASTER_VIEW_TABLE_ID);
+        if (caseMasterTable) {
+          setTableName(caseMasterTable.id);
+          log(`Found Case Master View table: ${caseMasterTable.name}`, 'success');
+        }
       } catch (err) {
         log(`Failed to fetch tables: ${err.message}`, 'error');
       }
@@ -335,7 +346,9 @@ export default function CaseMasterDedup({
             disabled={loading}
           >
             {availableTables.map(t => (
-              <option key={t} value={t}>{t}</option>
+              <option key={t.id} value={t.id}>
+                {t.name} {t.id === CASE_MASTER_VIEW_TABLE_ID ? '(default)' : ''}
+              </option>
             ))}
           </select>
         </div>
