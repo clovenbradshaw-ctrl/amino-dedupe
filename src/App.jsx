@@ -10,6 +10,7 @@ import CaseMasterDedup from './components/CaseMasterDedup.jsx';
 /**
  * Main App Component
  * Manages navigation between setup, configuration, scanning, and review flows.
+ * Includes Case Master View deduplication feature.
  */
 export default function App() {
   // App state
