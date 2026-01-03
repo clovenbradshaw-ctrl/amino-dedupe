@@ -5,7 +5,7 @@
  */
 
 // Rate limiting constants
-const INITIAL_DELAY_MS = 200; // Base delay between requests (5 req/sec)
+const INITIAL_DELAY_MS = 50; // Start fast, will auto-adjust if rate limited
 const MAX_RETRIES = 5;
 const INITIAL_BACKOFF_MS = 1000;
 const MAX_BACKOFF_MS = 32000;
@@ -96,13 +96,15 @@ export class AirtableClient {
 
   /**
    * Fetch table schema to determine writable vs computed fields
+   * @param {string} tableNameOrId - Table name or table ID
    */
-  async getTableSchema(tableName) {
+  async getTableSchema(tableNameOrId) {
     const result = await this.request(this.metaUrl);
-    const table = result.tables.find(t => t.name === tableName);
+    // Support both table name and table ID
+    const table = result.tables.find(t => t.name === tableNameOrId || t.id === tableNameOrId);
 
     if (!table) {
-      throw new Error(`Table "${tableName}" not found`);
+      throw new Error(`Table "${tableNameOrId}" not found`);
     }
 
     // Computed field types that cannot be written to
@@ -121,7 +123,7 @@ export class AirtableClient {
     ];
 
     const schema = {
-      tableName,
+      tableName: table.name,
       tableId: table.id,
       allFields: {},
       writableFields: [],
