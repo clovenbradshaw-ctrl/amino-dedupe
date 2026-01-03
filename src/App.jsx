@@ -5,6 +5,7 @@ import ScanResults from './components/ScanResults.jsx';
 import MergeReview from './components/MergeReview.jsx';
 import HistoryViewer from './components/HistoryViewer.jsx';
 import UnmergeModal from './components/UnmergeModal.jsx';
+import CaseMasterDedup from './components/CaseMasterDedup.jsx';
 
 /**
  * Main App Component
@@ -12,7 +13,7 @@ import UnmergeModal from './components/UnmergeModal.jsx';
  */
 export default function App() {
   // App state
-  const [currentView, setCurrentView] = useState('setup'); // setup, config, scan, review, history
+  const [currentView, setCurrentView] = useState('setup'); // setup, config, scan, review, history, caseMasterDedup
   const [credentials, setCredentials] = useState(null);
   const [schema, setSchema] = useState(null);
   const [fieldConfig, setFieldConfig] = useState(null);
@@ -157,6 +158,12 @@ export default function App() {
           History
         </button>
         <button
+          className={`nav-button ${currentView === 'caseMasterDedup' ? 'active' : ''}`}
+          onClick={() => setCurrentView('caseMasterDedup')}
+        >
+          Case Master
+        </button>
+        <button
           className={`nav-button ${currentView === 'config' ? 'active' : ''}`}
           onClick={() => setCurrentView('config')}
         >
@@ -229,6 +236,14 @@ export default function App() {
             credentials={credentials}
             schema={schema}
             onUnmerge={handleUnmergeRequest}
+            onLog={addLog}
+          />
+        );
+
+      case 'caseMasterDedup':
+        return (
+          <CaseMasterDedup
+            credentials={credentials}
             onLog={addLog}
           />
         );
