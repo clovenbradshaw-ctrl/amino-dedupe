@@ -1,405 +1,179 @@
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import {
-  computeFieldResolutions,
-  applyFieldSelections,
-  buildMergePayload,
-  getMergeSummary,
-  hasUnresolvedDecisions,
-  RESOLUTION_STRATEGIES,
-} from '../lib/merge.js';
-import { AirtableClient } from '../lib/airtable.js';
+import React, { useState, useMemo } from 'react'
 
-/**
- * MergeReview Component
- * Side-by-side diff view for reviewing and executing a merge.
- */
-export default function MergeReview({
-  candidate,
-  schema,
-  credentials,
-  fieldConfig,
-  onComplete,
-  onSkip,
-  onMarkNotDuplicate,
-  onLog,
-}) {
-  const [resolutions, setResolutions] = useState({});
-  const [merging, setMerging] = useState(false);
-  const [notes, setNotes] = useState('');
-  const [expandedFields, setExpandedFields] = useState(new Set());
+const API_URL = 'https://api.airtable.com/v0'
 
-  const log = (message, type = 'info') => {
-    if (onLog) onLog(message, type);
-  };
+export default function MergeReview({ candidate, credentials, schema, onComplete, onBack, onLog }) {
+  const [selections, setSelections] = useState({})
+  const [merging, setMerging] = useState(false)
 
-  // Compute initial field resolutions
-  useEffect(() => {
-    if (!candidate || !schema) return;
+  const { recordA, recordB, nameA, nameB } = candidate
 
-    const survivor = candidate.survivor;
-    const toMerge = [candidate.merged];
+  // Get all fields from both records
+  const allFields = useMemo(() => {
+    const fields = new Set([
+      ...Object.keys(recordA.fields),
+      ...Object.keys(recordB.fields)
+    ])
+    return Array.from(fields).sort()
+  }, [recordA, recordB])
 
-    const initialResolutions = computeFieldResolutions(survivor, toMerge, schema, {
-      ...fieldConfig,
-      excludeFields: fieldConfig?.excludeFromMerge || [],
-    });
+  // Check if field is computed (read-only)
+  const isComputed = (fieldName) => {
+    const field = schema?.fields?.find(f => f.name === fieldName)
+    return field?.isComputed || false
+  }
 
-    setResolutions(initialResolutions);
-  }, [candidate, schema, fieldConfig]);
-
-  // Get fields that need manual decision
-  const fieldsNeedingDecision = useMemo(() => {
-    return Object.entries(resolutions)
-      .filter(([_, r]) => r.needsDecision)
-      .map(([fieldName]) => fieldName);
-  }, [resolutions]);
-
-  // Summary of merge
-  const summary = useMemo(() => {
-    return getMergeSummary(resolutions);
-  }, [resolutions]);
-
-  // Handle field selection
-  const handleFieldSelection = useCallback((fieldName, strategy, value) => {
-    setResolutions(prev => ({
-      ...prev,
-      [fieldName]: {
-        ...prev[fieldName],
-        strategy,
-        value,
-        needsDecision: false,
-        include: true,
-      },
-    }));
-  }, []);
-
-  // Execute the merge
-  const handleMerge = async () => {
-    if (hasUnresolvedDecisions(resolutions)) {
-      log('Please resolve all field conflicts before merging', 'error');
-      return;
+  // Get selected value for a field
+  const getSelected = (fieldName) => {
+    if (selections[fieldName] !== undefined) {
+      return selections[fieldName]
     }
+    // Default: prefer non-empty value from A, else B
+    const valA = recordA.fields[fieldName]
+    const valB = recordB.fields[fieldName]
+    if (valA !== undefined && valA !== null && valA !== '') return 'A'
+    if (valB !== undefined && valB !== null && valB !== '') return 'B'
+    return 'A'
+  }
 
-    setMerging(true);
+  // Handle selection change
+  const handleSelect = (fieldName, choice) => {
+    setSelections(prev => ({ ...prev, [fieldName]: choice }))
+  }
+
+  // Build merged fields
+  const buildMergedFields = () => {
+    const merged = {}
+    for (const fieldName of allFields) {
+      if (isComputed(fieldName)) continue
+      const choice = getSelected(fieldName)
+      const value = choice === 'A' ? recordA.fields[fieldName] : recordB.fields[fieldName]
+      if (value !== undefined && value !== null) {
+        merged[fieldName] = value
+      }
+    }
+    return merged
+  }
+
+  // Execute merge
+  const handleMerge = async () => {
+    setMerging(true)
+    onLog('Starting merge...', 'info')
 
     try {
-      const client = new AirtableClient(credentials.apiKey, credentials.baseId);
+      const mergedFields = buildMergedFields()
 
-      // Build merge payload
-      const payload = buildMergePayload(
-        candidate.survivor,
-        [candidate.merged],
-        resolutions,
-        schema,
+      // Update survivor record (A)
+      onLog('Updating survivor record...', 'info')
+      const updateRes = await fetch(
+        `${API_URL}/${credentials.baseId}/${encodeURIComponent(credentials.tableName)}/${recordA.id}`,
         {
-          confidence: candidate.confidence,
-          matchReasons: candidate.reasons,
-          notes,
-          performedBy: 'user',
+          method: 'PATCH',
+          headers: {
+            Authorization: `Bearer ${credentials.apiKey}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ fields: mergedFields })
         }
-      );
+      )
 
-      log(`Executing merge ${payload.mergeId}...`, 'info');
-
-      // Update survivor record
-      log('Updating survivor record...', 'info');
-      await client.updateRecord(
-        credentials.tableName,
-        candidate.survivor.record.id,
-        payload.updateFields
-      );
-      log('Survivor record updated', 'success');
-
-      // Delete merged record(s)
-      log('Deleting merged record...', 'info');
-      for (const recordId of payload.recordsToDelete) {
-        await client.deleteRecord(credentials.tableName, recordId);
+      if (!updateRes.ok) {
+        const err = await updateRes.json().catch(() => ({}))
+        throw new Error(err.error?.message || 'Failed to update record')
       }
-      log(`Deleted ${payload.recordsToDelete.length} record(s)`, 'success');
 
-      log(`Merge ${payload.mergeId} completed successfully!`, 'success');
+      // Delete merged record (B)
+      onLog('Deleting duplicate record...', 'info')
+      const deleteRes = await fetch(
+        `${API_URL}/${credentials.baseId}/${encodeURIComponent(credentials.tableName)}/${recordB.id}`,
+        {
+          method: 'DELETE',
+          headers: {
+            Authorization: `Bearer ${credentials.apiKey}`
+          }
+        }
+      )
 
-      if (onComplete) {
-        onComplete(payload);
+      if (!deleteRes.ok) {
+        const err = await deleteRes.json().catch(() => ({}))
+        throw new Error(err.error?.message || 'Failed to delete record')
       }
+
+      onLog('Merge completed successfully!', 'success')
+      onComplete()
     } catch (err) {
-      log(`Merge failed: ${err.message}`, 'error');
+      onLog(`Merge failed: ${err.message}`, 'error')
     } finally {
-      setMerging(false);
+      setMerging(false)
     }
-  };
-
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-
-      if (e.key === 'Enter' && !e.shiftKey && fieldsNeedingDecision.length === 0) {
-        handleMerge();
-      } else if (e.key === 'Escape') {
-        onSkip && onSkip();
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [fieldsNeedingDecision, handleMerge, onSkip]);
-
-  if (!candidate) {
-    return <div className="merge-review empty">Select a candidate to review</div>;
   }
 
-  const survivorFields = candidate.survivor.record.fields;
-  const mergedFields = candidate.merged.record.fields;
-
-  // Get all unique field names
-  const allFieldNames = useMemo(() => {
-    const names = new Set([
-      ...Object.keys(survivorFields),
-      ...Object.keys(mergedFields),
-    ]);
-    return Array.from(names).sort();
-  }, [survivorFields, mergedFields]);
+  const formatValue = (val) => {
+    if (val === undefined || val === null) return '(empty)'
+    if (Array.isArray(val)) return val.join(', ')
+    if (typeof val === 'object') return JSON.stringify(val)
+    return String(val)
+  }
 
   return (
-    <div className="merge-review">
-      {/* Header */}
-      <div className="merge-header">
-        <div className="match-info">
-          <span
-            className="confidence-badge"
-            style={{ backgroundColor: candidate.tier.color }}
-          >
-            {candidate.confidence}%
-          </span>
-          <span className="tier-label">{candidate.tier.name} Match</span>
-        </div>
-        <div className="match-reasons">
-          {candidate.reasons.map((reason, idx) => (
-            <span key={idx} className="reason-badge">{reason}</span>
-          ))}
-        </div>
+    <div className="review">
+      <div className="review-header">
+        <h2>Review Merge</h2>
+        <div className="confidence-badge">{candidate.confidence}% match</div>
       </div>
 
-      {/* Conflicts Warning */}
-      {candidate.conflicts && candidate.conflicts.length > 0 && (
-        <div className="conflicts-warning">
-          <strong>⚠️ Data Conflicts Detected:</strong>
-          <ul>
-            {candidate.conflicts.map((conflict, idx) => (
-              <li key={idx}>{conflict}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {/* Record Headers */}
-      <div className="record-headers">
-        <div className="record-header survivor">
-          <div className="record-title">
-            <span className="record-badge keep">KEEP</span>
-            <span className="record-name">{candidate.survivor.name}</span>
+      <div className="review-records">
+        <div className="record-header">
+          <div className="col-a">
+            <span className="label keep">KEEP</span>
+            <span className="name">{nameA}</span>
           </div>
-          <div className="record-meta">
-            <span>Score: {candidate.survivor.score}</span>
-            <span>ID: {candidate.survivor.record.id}</span>
+          <div className="col-b">
+            <span className="label merge">MERGE</span>
+            <span className="name">{nameB}</span>
           </div>
         </div>
-        <div className="record-header merged">
-          <div className="record-title">
-            <span className="record-badge merge">MERGE</span>
-            <span className="record-name">{candidate.merged.name}</span>
-          </div>
-          <div className="record-meta">
-            <span>Score: {candidate.merged.score}</span>
-            <span>ID: {candidate.merged.record.id}</span>
-          </div>
-        </div>
-      </div>
 
-      {/* Field Diff Table */}
-      <div className="field-diff-container">
-        <table className="field-diff-table">
-          <thead>
-            <tr>
-              <th className="field-name-col">Field</th>
-              <th className="field-value-col">Record A (Keep)</th>
-              <th className="field-value-col">Record B (Merge)</th>
-              <th className="field-action-col">Resolution</th>
-            </tr>
-          </thead>
-          <tbody>
-            {allFieldNames.map(fieldName => {
-              const resolution = resolutions[fieldName] || {};
-              const valueA = survivorFields[fieldName];
-              const valueB = mergedFields[fieldName];
-              const isComputed = resolution.isComputed;
-              const isExcluded = resolution.isExcluded;
-              const needsDecision = resolution.needsDecision;
-              const isExpanded = expandedFields.has(fieldName);
+        <div className="field-list">
+          {allFields.map(fieldName => {
+            const valA = recordA.fields[fieldName]
+            const valB = recordB.fields[fieldName]
+            const computed = isComputed(fieldName)
+            const selected = getSelected(fieldName)
+            const same = JSON.stringify(valA) === JSON.stringify(valB)
 
-              // Format values for display
-              const displayA = formatValue(valueA);
-              const displayB = formatValue(valueB);
-              const valuesMatch = JSON.stringify(valueA) === JSON.stringify(valueB);
-
-              return (
-                <tr
-                  key={fieldName}
-                  className={`
-                    ${isComputed ? 'computed' : ''}
-                    ${isExcluded ? 'excluded' : ''}
-                    ${needsDecision ? 'needs-decision' : ''}
-                    ${valuesMatch ? 'values-match' : 'values-differ'}
-                  `}
+            return (
+              <div key={fieldName} className={`field-row ${computed ? 'computed' : ''} ${same ? 'same' : 'different'}`}>
+                <div className="field-name">
+                  {fieldName}
+                  {computed && <span className="tag computed">read-only</span>}
+                </div>
+                <div
+                  className={`field-value col-a ${!computed && selected === 'A' ? 'selected' : ''}`}
+                  onClick={() => !computed && handleSelect(fieldName, 'A')}
                 >
-                  <td className="field-name">
-                    <span>{fieldName}</span>
-                    {isComputed && <span className="field-badge computed">computed</span>}
-                    {isExcluded && <span className="field-badge excluded">excluded</span>}
-                    {resolution.isLinkField && <span className="field-badge link">link</span>}
-                  </td>
-                  <td className="field-value">
-                    <div
-                      className={`value-cell ${resolution.strategy === RESOLUTION_STRATEGIES.KEEP_A ? 'selected' : ''}`}
-                      onClick={() => !isComputed && !isExcluded && needsDecision && handleFieldSelection(fieldName, RESOLUTION_STRATEGIES.KEEP_A, valueA)}
-                    >
-                      {displayA || <span className="empty-value">(empty)</span>}
-                    </div>
-                  </td>
-                  <td className="field-value">
-                    <div
-                      className={`value-cell ${resolution.strategy === RESOLUTION_STRATEGIES.KEEP_B ? 'selected' : ''}`}
-                      onClick={() => !isComputed && !isExcluded && needsDecision && handleFieldSelection(fieldName, RESOLUTION_STRATEGIES.KEEP_B, valueB)}
-                    >
-                      {displayB || <span className="empty-value">(empty)</span>}
-                    </div>
-                  </td>
-                  <td className="field-action">
-                    {isComputed ? (
-                      <span className="resolution-auto">Read-only</span>
-                    ) : isExcluded ? (
-                      <span className="resolution-excluded">Excluded</span>
-                    ) : needsDecision ? (
-                      <div className="decision-buttons">
-                        <button
-                          className={`btn-pick ${resolution.strategy === RESOLUTION_STRATEGIES.KEEP_A ? 'active' : ''}`}
-                          onClick={() => handleFieldSelection(fieldName, RESOLUTION_STRATEGIES.KEEP_A, valueA)}
-                        >
-                          A
-                        </button>
-                        <button
-                          className={`btn-pick ${resolution.strategy === RESOLUTION_STRATEGIES.KEEP_B ? 'active' : ''}`}
-                          onClick={() => handleFieldSelection(fieldName, RESOLUTION_STRATEGIES.KEEP_B, valueB)}
-                        >
-                          B
-                        </button>
-                      </div>
-                    ) : resolution.strategy === RESOLUTION_STRATEGIES.AUTO ? (
-                      <span className="resolution-auto">Auto</span>
-                    ) : resolution.strategy === RESOLUTION_STRATEGIES.MERGE_LINKS ? (
-                      <span className="resolution-merge">Merge ({Array.isArray(resolution.value) ? resolution.value.length : 0} links)</span>
-                    ) : resolution.strategy === RESOLUTION_STRATEGIES.CONCATENATE ? (
-                      <span className="resolution-concat">Concat</span>
-                    ) : resolution.strategy === RESOLUTION_STRATEGIES.KEEP_A ? (
-                      <span className="resolution-keep-a">← A</span>
-                    ) : resolution.strategy === RESOLUTION_STRATEGIES.KEEP_B ? (
-                      <span className="resolution-keep-b">B →</span>
-                    ) : (
-                      <span className="resolution-auto">—</span>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Summary */}
-      <div className="merge-summary">
-        <h4>Merge Summary</h4>
-        <div className="summary-grid">
-          {summary.fieldsToUpdate.length > 0 && (
-            <div className="summary-item">
-              <span className="summary-label">Fields to update:</span>
-              <span className="summary-value">{summary.fieldsToUpdate.length}</span>
-            </div>
-          )}
-          {summary.linksAdded > 0 && (
-            <div className="summary-item">
-              <span className="summary-label">Links to add:</span>
-              <span className="summary-value">{summary.linksAdded}</span>
-            </div>
-          )}
-          {summary.decisionsNeeded.length > 0 && (
-            <div className="summary-item warning">
-              <span className="summary-label">Decisions needed:</span>
-              <span className="summary-value">{summary.decisionsNeeded.length}</span>
-            </div>
-          )}
+                  {formatValue(valA)}
+                </div>
+                <div
+                  className={`field-value col-b ${!computed && selected === 'B' ? 'selected' : ''}`}
+                  onClick={() => !computed && handleSelect(fieldName, 'B')}
+                >
+                  {formatValue(valB)}
+                </div>
+              </div>
+            )
+          })}
         </div>
       </div>
 
-      {/* Notes */}
-      <div className="merge-notes">
-        <label htmlFor="merge-notes">Notes (optional):</label>
-        <textarea
-          id="merge-notes"
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          placeholder="Add any notes about this merge decision..."
-          rows={2}
-        />
-      </div>
-
-      {/* Actions */}
-      <div className="merge-actions">
-        <button
-          className="btn btn-secondary"
-          onClick={onSkip}
-          disabled={merging}
-        >
-          Skip (Esc)
+      <div className="review-actions">
+        <button className="btn" onClick={onBack} disabled={merging}>
+          Back
         </button>
-        <button
-          className="btn btn-warning"
-          onClick={onMarkNotDuplicate}
-          disabled={merging}
-        >
-          Not a Duplicate
-        </button>
-        <button
-          className="btn btn-success"
-          onClick={handleMerge}
-          disabled={merging || fieldsNeedingDecision.length > 0}
-        >
-          {merging ? 'Merging...' : `Merge Records (Enter)`}
+        <button className="btn primary" onClick={handleMerge} disabled={merging}>
+          {merging ? 'Merging...' : 'Merge Records'}
         </button>
       </div>
-
-      {fieldsNeedingDecision.length > 0 && (
-        <div className="decisions-reminder">
-          Please select a value for: {fieldsNeedingDecision.join(', ')}
-        </div>
-      )}
     </div>
-  );
-}
-
-/**
- * Format a field value for display
- */
-function formatValue(value) {
-  if (value === null || value === undefined) return null;
-  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
-  if (Array.isArray(value)) {
-    if (value.length === 0) return null;
-    if (value.length <= 3) return value.join(', ');
-    return `${value.slice(0, 3).join(', ')} +${value.length - 3} more`;
-  }
-  if (typeof value === 'object') return JSON.stringify(value);
-  const str = String(value);
-  if (str.length > 100) return str.slice(0, 100) + '...';
-  return str;
+  )
 }
