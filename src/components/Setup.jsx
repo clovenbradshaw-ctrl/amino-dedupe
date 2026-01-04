@@ -3,18 +3,26 @@ import { AirtableClient, getStoredCredentials, storeCredentials } from '../lib/a
 
 /**
  * Setup Component
- * Handles API key, base ID, and table configuration.
- * Credentials are stored in localStorage (never leave the browser).
+ * Configure API key, base ID, and select TWO tables to compare.
  */
 export default function Setup({ onComplete, onLog }) {
   const [apiKey, setApiKey] = useState('');
   const [baseId, setBaseId] = useState('');
-  const [tableName, setTableName] = useState('Client Info');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  // Available tables from the base
+  const [availableTables, setAvailableTables] = useState([]);
+  const [tablesLoaded, setTablesLoaded] = useState(false);
+
+  // Selected tables
+  const [table1Name, setTable1Name] = useState('');
+  const [table2Name, setTable2Name] = useState('');
+
+  // Table info after validation
+  const [table1Info, setTable1Info] = useState(null);
+  const [table2Info, setTable2Info] = useState(null);
   const [validated, setValidated] = useState(false);
-  const [recordCount, setRecordCount] = useState(null);
-  const [schema, setSchema] = useState(null);
 
   // Load stored credentials on mount
   useEffect(() => {
@@ -22,7 +30,8 @@ export default function Setup({ onComplete, onLog }) {
     if (stored) {
       setApiKey(stored.apiKey || '');
       setBaseId(stored.baseId || '');
-      setTableName(stored.tableName || 'Client Info');
+      if (stored.table1Name) setTable1Name(stored.table1Name);
+      if (stored.table2Name) setTable2Name(stored.table2Name);
     }
   }, []);
 
@@ -30,9 +39,64 @@ export default function Setup({ onComplete, onLog }) {
     if (onLog) onLog(message, type);
   };
 
+  // Fetch available tables when API key and base ID are provided
+  const handleFetchTables = async () => {
+    if (!apiKey || !baseId) {
+      setError('Please enter API key and Base ID first');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    setTablesLoaded(false);
+    setAvailableTables([]);
+
+    try {
+      log('Connecting to Airtable...', 'info');
+      const client = new AirtableClient(apiKey, baseId);
+
+      // Fetch base metadata to get list of tables
+      const response = await fetch(`https://api.airtable.com/v0/meta/bases/${baseId}/tables`, {
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+        },
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error?.message || `API error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const tables = data.tables.map(t => ({
+        id: t.id,
+        name: t.name,
+        fieldCount: t.fields?.length || 0,
+      }));
+
+      setAvailableTables(tables);
+      setTablesLoaded(true);
+      log(`Found ${tables.length} tables in base`, 'success');
+
+      // Store credentials
+      storeCredentials({ apiKey, baseId, table1Name, table2Name });
+    } catch (err) {
+      setError(err.message);
+      log(`Failed to fetch tables: ${err.message}`, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Validate selected tables
   const handleValidate = async () => {
-    if (!apiKey || !baseId || !tableName) {
-      setError('Please fill in all fields');
+    if (!table1Name || !table2Name) {
+      setError('Please select both tables');
+      return;
+    }
+
+    if (table1Name === table2Name) {
+      setError('Please select two different tables');
       return;
     }
 
@@ -41,36 +105,48 @@ export default function Setup({ onComplete, onLog }) {
     setValidated(false);
 
     try {
-      log('Connecting to Airtable...', 'info');
       const client = new AirtableClient(apiKey, baseId);
 
-      // Fetch schema to validate connection and learn field types
-      log('Fetching table schema...', 'info');
-      const tableSchema = await client.getTableSchema(tableName);
+      // Fetch schema for table 1
+      log(`Fetching schema for "${table1Name}"...`, 'info');
+      const schema1 = await client.getTableSchema(table1Name);
 
-      setSchema(tableSchema);
-      log(`Schema loaded: ${tableSchema.writableFields.length} writable fields, ${tableSchema.computedFields.length} computed fields`, 'success');
-
-      // Fetch a small sample to verify read access
-      log('Verifying read access...', 'info');
-      const sample = await client.getAllRecords(tableName, {
-        fields: ['Client Name'],
-        onProgress: (p) => {
-          if (p.page === 1) {
-            log(`Found records, continuing count...`, 'info');
-          }
-        },
+      // Count records in table 1
+      const records1 = await client.getAllRecords(table1Name, {
+        fields: [schema1.writableFields[0] || schema1.computedFields[0]],
       });
 
-      setRecordCount(sample.length);
+      setTable1Info({
+        name: table1Name,
+        schema: schema1,
+        recordCount: records1.length,
+      });
+      log(`Table 1: ${records1.length} records, ${schema1.writableFields.length} fields`, 'success');
+
+      // Fetch schema for table 2
+      log(`Fetching schema for "${table2Name}"...`, 'info');
+      const schema2 = await client.getTableSchema(table2Name);
+
+      // Count records in table 2
+      const records2 = await client.getAllRecords(table2Name, {
+        fields: [schema2.writableFields[0] || schema2.computedFields[0]],
+      });
+
+      setTable2Info({
+        name: table2Name,
+        schema: schema2,
+        recordCount: records2.length,
+      });
+      log(`Table 2: ${records2.length} records, ${schema2.writableFields.length} fields`, 'success');
+
       setValidated(true);
-      log(`Successfully connected! Found ${sample.length} records.`, 'success');
+      log('Both tables validated successfully!', 'success');
 
       // Store credentials
-      storeCredentials({ apiKey, baseId, tableName });
+      storeCredentials({ apiKey, baseId, table1Name, table2Name });
     } catch (err) {
       setError(err.message);
-      log(`Connection failed: ${err.message}`, 'error');
+      log(`Validation failed: ${err.message}`, 'error');
     } finally {
       setLoading(false);
     }
@@ -81,9 +157,8 @@ export default function Setup({ onComplete, onLog }) {
       onComplete({
         apiKey,
         baseId,
-        tableName,
-        schema,
-        recordCount,
+        table1: table1Info,
+        table2: table2Info,
       });
     }
   };
@@ -93,110 +168,158 @@ export default function Setup({ onComplete, onLog }) {
       <div className="setup-card">
         <h2>Connect to Airtable</h2>
         <p className="setup-subtitle">
-          Enter your Airtable credentials. They're stored locally in your browser and never sent to any server.
+          Enter your credentials and select two tables to compare for duplicates.
         </p>
 
-        <div className="form-group">
-          <label htmlFor="apiKey">Personal Access Token</label>
-          <input
-            id="apiKey"
-            type="password"
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            placeholder="pat_xxxxxxxxxxxx"
-            disabled={loading}
-          />
-          <small>
-            Get your token from{' '}
-            <a href="https://airtable.com/create/tokens" target="_blank" rel="noopener noreferrer">
-              airtable.com/create/tokens
-            </a>
-          </small>
+        {/* Step 1: API Credentials */}
+        <div className="setup-section">
+          <h3>Step 1: API Credentials</h3>
+
+          <div className="form-group">
+            <label htmlFor="apiKey">Personal Access Token</label>
+            <input
+              id="apiKey"
+              type="password"
+              value={apiKey}
+              onChange={(e) => {
+                setApiKey(e.target.value);
+                setTablesLoaded(false);
+                setValidated(false);
+              }}
+              placeholder="pat_xxxxxxxxxxxx"
+              disabled={loading}
+            />
+            <small>
+              Get your token from{' '}
+              <a href="https://airtable.com/create/tokens" target="_blank" rel="noopener noreferrer">
+                airtable.com/create/tokens
+              </a>
+            </small>
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="baseId">Base ID</label>
+            <input
+              id="baseId"
+              type="text"
+              value={baseId}
+              onChange={(e) => {
+                setBaseId(e.target.value);
+                setTablesLoaded(false);
+                setValidated(false);
+              }}
+              placeholder="appXXXXXXXXXXXXXX"
+              disabled={loading}
+            />
+            <small>Found in your base URL: airtable.com/[baseId]/...</small>
+          </div>
+
+          <button
+            className="btn btn-primary"
+            onClick={handleFetchTables}
+            disabled={loading || !apiKey || !baseId}
+          >
+            {loading && !tablesLoaded ? 'Connecting...' : tablesLoaded ? 'Refresh Tables' : 'Connect & Load Tables'}
+          </button>
         </div>
 
-        <div className="form-group">
-          <label htmlFor="baseId">Base ID</label>
-          <input
-            id="baseId"
-            type="text"
-            value={baseId}
-            onChange={(e) => setBaseId(e.target.value)}
-            placeholder="appXXXXXXXXXXXXXX"
-            disabled={loading}
-          />
-          <small>Found in your base URL: airtable.com/[baseId]/...</small>
-        </div>
+        {/* Step 2: Select Tables */}
+        {tablesLoaded && (
+          <div className="setup-section">
+            <h3>Step 2: Select Tables to Compare</h3>
 
-        <div className="form-group">
-          <label htmlFor="tableName">Table Name</label>
-          <input
-            id="tableName"
-            type="text"
-            value={tableName}
-            onChange={(e) => setTableName(e.target.value)}
-            placeholder="Client Info"
-            disabled={loading}
-          />
-        </div>
+            <div className="table-selection">
+              <div className="form-group">
+                <label htmlFor="table1">Table 1 (Source)</label>
+                <select
+                  id="table1"
+                  value={table1Name}
+                  onChange={(e) => {
+                    setTable1Name(e.target.value);
+                    setValidated(false);
+                  }}
+                  disabled={loading}
+                >
+                  <option value="">-- Select Table --</option>
+                  {availableTables.map(t => (
+                    <option key={t.id} value={t.name} disabled={t.name === table2Name}>
+                      {t.name} ({t.fieldCount} fields)
+                    </option>
+                  ))}
+                </select>
+              </div>
 
+              <div className="compare-arrow">⟷</div>
+
+              <div className="form-group">
+                <label htmlFor="table2">Table 2 (Target)</label>
+                <select
+                  id="table2"
+                  value={table2Name}
+                  onChange={(e) => {
+                    setTable2Name(e.target.value);
+                    setValidated(false);
+                  }}
+                  disabled={loading}
+                >
+                  <option value="">-- Select Table --</option>
+                  {availableTables.map(t => (
+                    <option key={t.id} value={t.name} disabled={t.name === table1Name}>
+                      {t.name} ({t.fieldCount} fields)
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <button
+              className="btn btn-primary"
+              onClick={handleValidate}
+              disabled={loading || !table1Name || !table2Name || table1Name === table2Name}
+            >
+              {loading ? 'Validating...' : 'Validate Tables'}
+            </button>
+          </div>
+        )}
+
+        {/* Error Message */}
         {error && (
           <div className="error-message">
             {error}
           </div>
         )}
 
-        {validated && (
-          <div className="success-message">
-            <div className="success-icon">✓</div>
-            <div>
-              <strong>Connected successfully!</strong>
-              <p>{recordCount.toLocaleString()} records found in {tableName}</p>
-              <p>{schema?.writableFields.length} writable fields, {schema?.computedFields.length} computed (read-only)</p>
+        {/* Validation Success */}
+        {validated && table1Info && table2Info && (
+          <div className="validation-success">
+            <div className="success-message">
+              <div className="success-icon">✓</div>
+              <div>
+                <strong>Tables validated successfully!</strong>
+              </div>
             </div>
-          </div>
-        )}
 
-        <div className="button-group">
-          <button
-            className="btn btn-primary"
-            onClick={handleValidate}
-            disabled={loading || !apiKey || !baseId || !tableName}
-          >
-            {loading ? 'Connecting...' : validated ? 'Re-validate' : 'Connect'}
-          </button>
+            <div className="tables-summary">
+              <div className="table-summary">
+                <h4>{table1Info.name}</h4>
+                <p>{table1Info.recordCount.toLocaleString()} records</p>
+                <p>{table1Info.schema.writableFields.length} writable fields</p>
+              </div>
+              <div className="compare-icon">⟷</div>
+              <div className="table-summary">
+                <h4>{table2Info.name}</h4>
+                <p>{table2Info.recordCount.toLocaleString()} records</p>
+                <p>{table2Info.schema.writableFields.length} writable fields</p>
+              </div>
+            </div>
 
-          {validated && (
             <button
-              className="btn btn-success"
+              className="btn btn-success btn-large"
               onClick={handleContinue}
             >
-              Continue to Configuration →
+              Start Comparison →
             </button>
-          )}
-        </div>
-
-        {schema && (
-          <details className="schema-details">
-            <summary>View Schema Details</summary>
-            <div className="schema-content">
-              <h4>Writable Fields ({schema.writableFields.length})</h4>
-              <ul className="field-list">
-                {schema.writableFields.map(f => (
-                  <li key={f} className={schema.linkFields.includes(f) ? 'link-field' : ''}>
-                    {f}
-                    {schema.linkFields.includes(f) && <span className="field-tag">link</span>}
-                  </li>
-                ))}
-              </ul>
-
-              <h4>Computed Fields ({schema.computedFields.length})</h4>
-              <ul className="field-list computed">
-                {schema.computedFields.map(f => (
-                  <li key={f}>{f}</li>
-                ))}
-              </ul>
-            </div>
-          </details>
+          </div>
         )}
       </div>
     </div>
