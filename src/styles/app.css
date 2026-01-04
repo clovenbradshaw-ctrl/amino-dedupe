@@ -2572,6 +2572,71 @@ textarea:disabled {
   margin-bottom: var(--spacing-sm);
 }
 
+/* Output Type Selector */
+.output-type-selector {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.output-type-option {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md);
+  background: var(--bg-input);
+  border: 2px solid var(--border-color);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.output-type-option:hover {
+  border-color: var(--accent-primary);
+  background: rgba(99, 102, 241, 0.05);
+}
+
+.output-type-option.selected {
+  border-color: var(--accent-primary);
+  background: rgba(99, 102, 241, 0.1);
+}
+
+.output-type-option .option-icon {
+  font-size: 1.5rem;
+  flex-shrink: 0;
+}
+
+.output-type-option .option-content {
+  flex: 1;
+}
+
+.output-type-option .option-title {
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-xs);
+}
+
+.output-type-option .option-description {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.output-type-option .option-badge {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.output-type-option.selected .option-badge {
+  background: var(--accent-primary);
+  color: white;
+}
+
 .field-checkboxes {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));

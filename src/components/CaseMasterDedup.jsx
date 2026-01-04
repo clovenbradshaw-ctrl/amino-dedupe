@@ -43,7 +43,8 @@ export default function CaseMasterDedup({
   const [dateEnd, setDateEnd] = useState('');
   const [matchFields, setMatchFields] = useState([]);
 
-  // Mode state
+  // Mode state - outputType defaults to 'final' so wizard can always progress
+  const [outputType, setOutputType] = useState('final'); // 'final' | 'staging' | 'compare'
   const [forceMode, setForceMode] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [resolutions, setResolutions] = useState({});
@@ -386,6 +387,46 @@ export default function CaseMasterDedup({
                 <span>{field}</span>
               </label>
             ))}
+          </div>
+        </div>
+
+        <div className="config-section">
+          <h3>Output Type</h3>
+          <p className="config-hint">What kind of result do you want?</p>
+          <div className="output-type-selector">
+            <div
+              className={`output-type-option ${outputType === 'final' ? 'selected' : ''}`}
+              onClick={() => setOutputType('final')}
+            >
+              <div className="option-icon">⚡</div>
+              <div className="option-content">
+                <div className="option-title">Create final result</div>
+                <div className="option-description">The merged data is ready to use.</div>
+              </div>
+              <div className="option-badge">FINAL OUTPUT</div>
+            </div>
+            <div
+              className={`output-type-option ${outputType === 'staging' ? 'selected' : ''}`}
+              onClick={() => setOutputType('staging')}
+            >
+              <div className="option-icon">📋</div>
+              <div className="option-content">
+                <div className="option-title">Create staging table</div>
+                <div className="option-description">Review and clean up before finalizing.</div>
+              </div>
+              <div className="option-badge">REVIEW FIRST</div>
+            </div>
+            <div
+              className={`output-type-option ${outputType === 'compare' ? 'selected' : ''}`}
+              onClick={() => setOutputType('compare')}
+            >
+              <div className="option-icon">🔍</div>
+              <div className="option-content">
+                <div className="option-title">Keep both versions</div>
+                <div className="option-description">Preserve all source data for comparison.</div>
+              </div>
+              <div className="option-badge">COMPARE MODE</div>
+            </div>
           </div>
         </div>
 
