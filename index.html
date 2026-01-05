@@ -2006,7 +2006,7 @@ function HistoryViewer({ credentials, addLog }) {
 
 function BulkMergeModal({ selectedCandidates, schema, credentials, onComplete, onClose, addLog }) {
   const [merging, setMerging] = useState(false);
-  const [progress, setProgress] = useState({ current: 0, total: 0, status: 'pending' });
+  const [progress, setProgress] = useState({ current: 0, total: 0, status: 'pending', currentCandidate: null, boxStatus: null });
   const [results, setResults] = useState({ success: [], failed: [], boxFoldersToDelete: [] });
   const [autoResolveAll, setAutoResolveAll] = useState(true);
 
@@ -2014,14 +2014,31 @@ function BulkMergeModal({ selectedCandidates, schema, credentials, onComplete, o
     if (selectedCandidates.length === 0) return;
 
     setMerging(true);
-    setProgress({ current: 0, total: selectedCandidates.length, status: 'running' });
+    setProgress({ current: 0, total: selectedCandidates.length, status: 'running', currentCandidate: null, boxStatus: null });
     const newResults = { success: [], failed: [], boxFoldersToDelete: [] };
 
     const client = new AirtableClient(credentials.apiKey, credentials.baseId);
 
     for (let i = 0; i < selectedCandidates.length; i++) {
       const candidate = selectedCandidates[i];
-      setProgress({ current: i + 1, total: selectedCandidates.length, status: 'running' });
+      const survivorBoxId = candidate.survivor.record.fields?.['Box_Folder_ID'];
+      const mergedBoxId = candidate.merged.record.fields?.['Box_Folder_ID'];
+      const hasBoxFolders = !!(survivorBoxId || mergedBoxId);
+      const needsBoxMigration = !!(survivorBoxId && mergedBoxId && survivorBoxId !== mergedBoxId);
+
+      setProgress({
+        current: i + 1,
+        total: selectedCandidates.length,
+        status: 'running',
+        currentCandidate: candidate,
+        boxStatus: {
+          survivorBoxId,
+          mergedBoxId,
+          hasBoxFolders,
+          needsBoxMigration,
+          webhookStatus: needsBoxMigration ? 'pending' : null
+        }
+      });
 
       try {
         const survivorFields = candidate.survivor.record.fields || {};
@@ -2090,6 +2107,16 @@ function BulkMergeModal({ selectedCandidates, schema, credentials, onComplete, o
             migrationConfirmed: webhookResult.result?.migrationConfirmed || false,
             migrationConfirmedAt: webhookResult.result?.migrationConfirmedAt || null
           };
+
+          // Update progress with webhook result
+          setProgress(prev => ({
+            ...prev,
+            boxStatus: {
+              ...prev.boxStatus,
+              webhookStatus: webhookResult.success ? 'sent' : 'failed',
+              webhookError: webhookResult.error
+            }
+          }));
 
           if (webhookResult.success) {
             addLog(`Box migration webhook sent successfully`, 'success');
@@ -2274,14 +2301,81 @@ function BulkMergeModal({ selectedCandidates, schema, credentials, onComplete, o
           )}
 
           {progress.status === 'running' && (
-            <div style={{ textAlign: 'center', padding: '40px 20px' }}>
-              <div style={{ fontSize: '1.2em', marginBottom: '20px' }}>
-                Merging... {progress.current} of {progress.total}
+            <div style={{ padding: '30px 20px' }}>
+              <div style={{ textAlign: 'center', fontSize: '1.2em', marginBottom: '20px' }}>
+                Processing {progress.current} of {progress.total}
               </div>
-              <div className="progress-bar" style={{ height: '12px', borderRadius: '6px' }}>
+              <div className="progress-bar" style={{ height: '12px', borderRadius: '6px', marginBottom: '25px' }}>
                 <div className="fill" style={{ width: `${progressPercent}%` }}></div>
               </div>
-              <div style={{ color: '#94a3b8', marginTop: '15px' }}>
+
+              {/* Current record details */}
+              {progress.currentCandidate && (
+                <div style={{ background: '#0f172a', borderRadius: '8px', padding: '20px', marginBottom: '20px' }}>
+                  <div style={{ fontSize: '1.1em', marginBottom: '15px', color: '#e2e8f0' }}>
+                    <strong>Now Processing:</strong>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: '15px', marginBottom: '15px' }}>
+                    <div style={{ background: 'rgba(239, 68, 68, 0.1)', padding: '12px', borderRadius: '6px', textAlign: 'center' }}>
+                      <div style={{ color: '#ef4444', fontWeight: 'bold', marginBottom: '5px' }}>{progress.currentCandidate.merged.name}</div>
+                      <div style={{ color: '#94a3b8', fontSize: '0.8em' }}>To be merged</div>
+                    </div>
+                    <div style={{ color: '#6366f1', fontSize: '1.5em' }}>→</div>
+                    <div style={{ background: 'rgba(16, 185, 129, 0.1)', padding: '12px', borderRadius: '6px', textAlign: 'center' }}>
+                      <div style={{ color: '#10b981', fontWeight: 'bold', marginBottom: '5px' }}>{progress.currentCandidate.survivor.name}</div>
+                      <div style={{ color: '#94a3b8', fontSize: '0.8em' }}>Survivor</div>
+                    </div>
+                  </div>
+
+                  {/* Box Folder Status */}
+                  <div style={{ borderTop: '1px solid #334155', paddingTop: '15px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+                      <span style={{ color: '#f59e0b', fontWeight: 'bold' }}>Box Folder Status:</span>
+                      {!progress.boxStatus?.hasBoxFolders ? (
+                        <span style={{ color: '#64748b' }}>No Box folders in either record</span>
+                      ) : progress.boxStatus?.needsBoxMigration ? (
+                        <span style={{ color: '#f59e0b' }}>Migration needed - both records have folders</span>
+                      ) : progress.boxStatus?.survivorBoxId ? (
+                        <span style={{ color: '#10b981' }}>Survivor has folder (no migration needed)</span>
+                      ) : (
+                        <span style={{ color: '#3b82f6' }}>Only merged record has folder (will be adopted)</span>
+                      )}
+                    </div>
+
+                    {progress.boxStatus?.hasBoxFolders && (
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '0.85em' }}>
+                        <div style={{ padding: '8px', background: 'rgba(16, 185, 129, 0.1)', borderRadius: '4px' }}>
+                          <span style={{ color: '#94a3b8' }}>Survivor Box ID: </span>
+                          <code style={{ color: '#10b981' }}>{progress.boxStatus?.survivorBoxId || 'None'}</code>
+                        </div>
+                        <div style={{ padding: '8px', background: 'rgba(239, 68, 68, 0.1)', borderRadius: '4px' }}>
+                          <span style={{ color: '#94a3b8' }}>Merged Box ID: </span>
+                          <code style={{ color: '#ef4444' }}>{progress.boxStatus?.mergedBoxId || 'None'}</code>
+                        </div>
+                      </div>
+                    )}
+
+                    {progress.boxStatus?.needsBoxMigration && (
+                      <div style={{ marginTop: '10px', padding: '10px', background: 'rgba(245, 158, 11, 0.1)', borderRadius: '4px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ color: '#f59e0b' }}>Webhook to n8n:</span>
+                          {progress.boxStatus?.webhookStatus === 'pending' && (
+                            <span style={{ color: '#94a3b8' }}>Sending...</span>
+                          )}
+                          {progress.boxStatus?.webhookStatus === 'sent' && (
+                            <span style={{ color: '#10b981' }}>Sent successfully</span>
+                          )}
+                          {progress.boxStatus?.webhookStatus === 'failed' && (
+                            <span style={{ color: '#ef4444' }}>Failed: {progress.boxStatus?.webhookError}</span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div style={{ color: '#94a3b8', textAlign: 'center', fontSize: '0.9em' }}>
                 Please wait, do not close this window...
               </div>
             </div>
