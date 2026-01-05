@@ -2504,33 +2504,6 @@ function MainApp({ accessLevel, onLogout }) {
     }
   };
 
-  // Select all visible candidates
-  const handleSelectAll = () => {
-    if (selectedIds.size === filteredCandidates.length) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(filteredCandidates.map(c => c.id)));
-    }
-  };
-
-  // Get selected candidates for bulk merge
-  const selectedCandidates = useMemo(() =>
-    filteredCandidates.filter(c => selectedIds.has(c.id)),
-    [filteredCandidates, selectedIds]
-  );
-
-  // Handle bulk merge completion
-  const handleBulkMergeComplete = (results) => {
-    const mergedIds = results.success.map(r => r.candidate.id);
-    setCandidates(prev => prev.filter(c => !mergedIds.includes(c.id)));
-    setSelectedIds(new Set());
-    setShowBulkMergeModal(false);
-    addLog(`Bulk merge complete: ${results.success.length} merged, ${results.failed.length} failed`, 'success');
-    if (results.boxFoldersToDelete.length > 0) {
-      addLog(`${results.boxFoldersToDelete.length} box folders flagged for deletion`, 'warning');
-    }
-  };
-
   const filteredCandidates = useMemo(() => {
     let result = [...candidates];
     if (tierFilter !== 'all') result = result.filter(c => c.tier.tier === parseInt(tierFilter));
@@ -2567,6 +2540,33 @@ function MainApp({ accessLevel, onLogout }) {
     }
     return result;
   }, [candidates, tierFilter, bahrFilter, searchFilter, createdDateFrom, createdDateTo]);
+
+  // Select all visible candidates
+  const handleSelectAll = () => {
+    if (selectedIds.size === filteredCandidates.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredCandidates.map(c => c.id)));
+    }
+  };
+
+  // Get selected candidates for bulk merge
+  const selectedCandidates = useMemo(() =>
+    filteredCandidates.filter(c => selectedIds.has(c.id)),
+    [filteredCandidates, selectedIds]
+  );
+
+  // Handle bulk merge completion
+  const handleBulkMergeComplete = (results) => {
+    const mergedIds = results.success.map(r => r.candidate.id);
+    setCandidates(prev => prev.filter(c => !mergedIds.includes(c.id)));
+    setSelectedIds(new Set());
+    setShowBulkMergeModal(false);
+    addLog(`Bulk merge complete: ${results.success.length} merged, ${results.failed.length} failed`, 'success');
+    if (results.boxFoldersToDelete.length > 0) {
+      addLog(`${results.boxFoldersToDelete.length} box folders flagged for deletion`, 'warning');
+    }
+  };
 
   const stats = useMemo(() => ({
     total: allRecords.length,
