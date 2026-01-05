@@ -33,13 +33,17 @@
 
     .input-group { margin-bottom: 15px; }
     .input-group label { display: block; margin-bottom: 5px; color: #94a3b8; }
-    input[type="text"], input[type="password"], select, textarea {
+    input[type="text"], input[type="password"], input[type="date"], select, textarea {
       width: 100%;
       padding: 10px;
       border: 1px solid #475569;
       border-radius: 6px;
       background: #1e293b;
       color: #e2e8f0;
+    }
+    input[type="date"]::-webkit-calendar-picker-indicator {
+      filter: invert(0.8);
+      cursor: pointer;
     }
     input:focus, select:focus, textarea:focus { outline: none; border-color: #6366f1; }
 
@@ -1664,6 +1668,11 @@ function MainApp({ accessLevel, onLogout }) {
   const [tierFilter, setTierFilter] = useState('all');
   const [searchFilter, setSearchFilter] = useState('');
   const [bahrFilter, setBahrFilter] = useState('all');
+  const [createdDateFrom, setCreatedDateFrom] = useState('');
+  const [createdDateTo, setCreatedDateTo] = useState('');
+  const [selectedForBulkMerge, setSelectedForBulkMerge] = useState(new Set());
+  const [bulkMerging, setBulkMerging] = useState(false);
+  const [bulkMergeProgress, setBulkMergeProgress] = useState({ current: 0, total: 0 });
 
   const logRef = useRef(null);
   const isBahrOnly = accessLevel === 'bahr';
@@ -1691,7 +1700,9 @@ function MainApp({ accessLevel, onLogout }) {
       const filter = isBahrOnly ? '{Bahr Client}' : '';
       addLog(`Fetching ${isBahrOnly ? 'Bahr clients' : 'all clients'}...`, 'info');
 
-      const records = await client.getAllRecords(CLIENT_INFO_TABLE, [...tableSchema.writableFields, 'dedupe_history'], filter,
+      // Include Created field for filtering (it's a computed field)
+      const fieldsToFetch = [...tableSchema.writableFields, 'dedupe_history', 'Created'];
+      const records = await client.getAllRecords(CLIENT_INFO_TABLE, fieldsToFetch, filter,
         (p) => addLog(`Page ${p.page}: ${p.total} records`, 'info'));
 
       setAllRecords(records);
@@ -1742,8 +1753,23 @@ function MainApp({ accessLevel, onLogout }) {
         c.merged.record.id.includes(q)
       );
     }
+    // Filter by Created date
+    if (createdDateFrom || createdDateTo) {
+      result = result.filter(c => {
+        const survivorCreated = c.survivor.record.fields['Created'] || c.survivor.record.fields['createdTime'];
+        const mergedCreated = c.merged.record.fields['Created'] || c.merged.record.fields['createdTime'];
+        // Use the earliest created date between the two records
+        const createdDate = survivorCreated || mergedCreated;
+        if (!createdDate) return true; // Include if no date
+
+        const recordDate = new Date(createdDate).toISOString().split('T')[0];
+        if (createdDateFrom && recordDate < createdDateFrom) return false;
+        if (createdDateTo && recordDate > createdDateTo) return false;
+        return true;
+      });
+    }
     return result;
-  }, [candidates, tierFilter, bahrFilter, searchFilter]);
+  }, [candidates, tierFilter, bahrFilter, searchFilter, createdDateFrom, createdDateTo]);
 
   const stats = useMemo(() => ({
     total: allRecords.length,
@@ -1751,6 +1777,229 @@ function MainApp({ accessLevel, onLogout }) {
     byTier: { 1: candidates.filter(c => c.tier.tier === 1).length, 2: candidates.filter(c => c.tier.tier === 2).length,
               3: candidates.filter(c => c.tier.tier === 3).length, 4: candidates.filter(c => c.tier.tier === 4).length }
   }), [allRecords, candidates]);
+
+  // Toggle selection for bulk merge
+  const toggleBulkSelect = (candidateId) => {
+    setSelectedForBulkMerge(prev => {
+      const next = new Set(prev);
+      if (next.has(candidateId)) next.delete(candidateId);
+      else next.add(candidateId);
+      return next;
+    });
+  };
+
+  // Select/deselect all filtered candidates
+  const toggleSelectAll = () => {
+    if (selectedForBulkMerge.size === filteredCandidates.length) {
+      setSelectedForBulkMerge(new Set());
+    } else {
+      setSelectedForBulkMerge(new Set(filteredCandidates.map(c => c.id)));
+    }
+  };
+
+  // Generate CSV of deleted records for download
+  const generateDeletedRecordsCSV = (deletedRecords) => {
+    if (deletedRecords.length === 0) return '';
+
+    // Get all unique field names from all records
+    const allFields = new Set();
+    deletedRecords.forEach(record => {
+      Object.keys(record.fields || {}).forEach(f => allFields.add(f));
+    });
+    allFields.add('record_id');
+    allFields.add('merge_id');
+    allFields.add('merged_into_record_id');
+    allFields.add('merged_into_name');
+    allFields.add('merge_timestamp');
+    allFields.add('confidence');
+
+    const fieldArray = Array.from(allFields).sort();
+
+    // CSV header
+    const header = fieldArray.map(f => `"${f.replace(/"/g, '""')}"`).join(',');
+
+    // CSV rows
+    const rows = deletedRecords.map(record => {
+      return fieldArray.map(field => {
+        let value = '';
+        if (field === 'record_id') value = record.recordId || '';
+        else if (field === 'merge_id') value = record.mergeId || '';
+        else if (field === 'merged_into_record_id') value = record.survivorId || '';
+        else if (field === 'merged_into_name') value = record.survivorName || '';
+        else if (field === 'merge_timestamp') value = record.timestamp || '';
+        else if (field === 'confidence') value = record.confidence || '';
+        else value = record.fields?.[field] ?? '';
+
+        // Handle arrays and objects
+        if (Array.isArray(value)) value = value.join('; ');
+        else if (typeof value === 'object' && value !== null) value = JSON.stringify(value);
+
+        // Escape CSV
+        return `"${String(value).replace(/"/g, '""')}"`;
+      }).join(',');
+    });
+
+    return [header, ...rows].join('\n');
+  };
+
+  // Download CSV file
+  const downloadCSV = (csvContent, filename) => {
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(link.href);
+  };
+
+  // Bulk merge selected candidates
+  const handleBulkMerge = async () => {
+    const selectedCandidates = filteredCandidates.filter(c => selectedForBulkMerge.has(c.id));
+    if (selectedCandidates.length === 0) {
+      addLog('No candidates selected for bulk merge', 'warning');
+      return;
+    }
+
+    // Check for any pending decisions needed
+    const hasTier4 = selectedCandidates.some(c => c.tier.tier === 4);
+    if (hasTier4) {
+      addLog('Cannot bulk merge Tier 4 (conflict) candidates. Please review them individually.', 'error');
+      return;
+    }
+
+    if (!window.confirm(`Are you sure you want to merge ${selectedCandidates.length} duplicate pairs?\n\nThis will:\n- Merge data from ${selectedCandidates.length} records into their survivors\n- Delete ${selectedCandidates.length} duplicate records\n- Download a CSV backup of all deleted records\n\nThis action is reversible through the History tab.`)) {
+      return;
+    }
+
+    setBulkMerging(true);
+    setBulkMergeProgress({ current: 0, total: selectedCandidates.length });
+    const deletedRecords = [];
+    const successfulMerges = [];
+
+    try {
+      const client = new AirtableClient(apiKey, baseId);
+      addLog(`Starting bulk merge of ${selectedCandidates.length} pairs...`, 'info');
+
+      for (let i = 0; i < selectedCandidates.length; i++) {
+        const candidate = selectedCandidates[i];
+        setBulkMergeProgress({ current: i + 1, total: selectedCandidates.length });
+
+        try {
+          const survivorFields = candidate.survivor.record.fields || {};
+          const mergedFields = candidate.merged.record.fields || {};
+
+          // Auto-resolve field decisions for bulk merge
+          const allFieldNames = new Set([...Object.keys(survivorFields), ...Object.keys(mergedFields)]);
+          const fieldDecisions = {};
+          const updateFields = {};
+
+          for (const fieldName of allFieldNames) {
+            const isComputed = schema.computedFields.includes(fieldName);
+            const isExcluded = EXCLUDE_FROM_MERGE.includes(fieldName);
+            const valA = survivorFields[fieldName];
+            const valB = mergedFields[fieldName];
+            const isEmpty = (v) => v === null || v === undefined || (typeof v === 'string' && !v.trim()) || (Array.isArray(v) && v.length === 0);
+
+            if (isComputed || isExcluded) {
+              fieldDecisions[fieldName] = { strategy: 'skip', value: null, include: false };
+            } else if (JSON.stringify(valA) === JSON.stringify(valB)) {
+              fieldDecisions[fieldName] = { strategy: 'auto', value: valA, include: !isEmpty(valA) };
+              if (!isEmpty(valA)) updateFields[fieldName] = valA;
+            } else if (isEmpty(valA) && !isEmpty(valB)) {
+              fieldDecisions[fieldName] = { strategy: 'keep_b', value: valB, include: true };
+              updateFields[fieldName] = valB;
+            } else if (!isEmpty(valA) && isEmpty(valB)) {
+              fieldDecisions[fieldName] = { strategy: 'keep_a', value: valA, include: true };
+              updateFields[fieldName] = valA;
+            } else if (schema.linkFields.includes(fieldName)) {
+              // Merge link fields
+              const merged = [...new Set([...(valA || []), ...(valB || [])])];
+              fieldDecisions[fieldName] = { strategy: 'merge', value: merged, include: merged.length > 0 };
+              if (merged.length > 0) updateFields[fieldName] = merged;
+            } else {
+              // For conflicts in bulk mode, keep survivor value (Record A)
+              fieldDecisions[fieldName] = { strategy: 'keep_a', value: valA, include: true };
+              updateFields[fieldName] = valA;
+            }
+          }
+
+          // Build history entry with COMPLETE data
+          const historyEntry = {
+            merge_id: generateMergeId(),
+            timestamp: new Date().toISOString(),
+            action: 'merge',
+            confidence: candidate.confidence,
+            match_reasons: candidate.reasons,
+            survivor_record_id: candidate.survivor.record.id,
+            merged_records: [{
+              original_record_id: candidate.merged.record.id,
+              field_snapshot: { ...mergedFields }, // Complete snapshot of ALL fields
+            }],
+            field_decisions: fieldDecisions,
+            performed_by: 'bulk_merge',
+            notes: `Bulk merge operation - ${selectedCandidates.length} pairs processed`,
+            bulk_merge_batch_id: `bulk_${Date.now()}`
+          };
+
+          // Get existing history and append
+          const existingHistory = parseDedupeHistory(survivorFields['dedupe_history']);
+          existingHistory.push(historyEntry);
+          updateFields['dedupe_history'] = JSON.stringify(existingHistory, null, 2);
+
+          // Update survivor record
+          await client.updateRecord(CLIENT_INFO_TABLE, candidate.survivor.record.id, updateFields);
+
+          // Store deleted record info for CSV (with COMPLETE field data)
+          deletedRecords.push({
+            recordId: candidate.merged.record.id,
+            mergeId: historyEntry.merge_id,
+            survivorId: candidate.survivor.record.id,
+            survivorName: candidate.survivor.name,
+            timestamp: historyEntry.timestamp,
+            confidence: candidate.confidence,
+            fields: { ...mergedFields } // Complete field data
+          });
+
+          // Delete merged record
+          await client.deleteRecord(CLIENT_INFO_TABLE, candidate.merged.record.id);
+
+          successfulMerges.push(candidate.id);
+          addLog(`[${i + 1}/${selectedCandidates.length}] Merged: ${candidate.merged.name} -> ${candidate.survivor.name}`, 'success');
+
+          // Rate limiting
+          if (i < selectedCandidates.length - 1) {
+            await new Promise(r => setTimeout(r, 250));
+          }
+        } catch (err) {
+          addLog(`[${i + 1}/${selectedCandidates.length}] Failed: ${candidate.merged.name} - ${err.message}`, 'error');
+        }
+      }
+
+      // FORCE download CSV of deleted records
+      if (deletedRecords.length > 0) {
+        const csvContent = generateDeletedRecordsCSV(deletedRecords);
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+        const filename = `deleted_records_bulk_merge_${timestamp}.csv`;
+        downloadCSV(csvContent, filename);
+        addLog(`Downloaded CSV backup: ${filename} (${deletedRecords.length} records)`, 'success');
+      }
+
+      // Remove successful merges from candidates
+      setCandidates(prev => prev.filter(c => !successfulMerges.includes(c.id)));
+      setSelectedForBulkMerge(new Set());
+
+      addLog(`Bulk merge complete: ${successfulMerges.length}/${selectedCandidates.length} successful`,
+             successfulMerges.length === selectedCandidates.length ? 'success' : 'warning');
+
+    } catch (err) {
+      addLog(`Bulk merge error: ${err.message}`, 'error');
+    } finally {
+      setBulkMerging(false);
+      setBulkMergeProgress({ current: 0, total: 0 });
+    }
+  };
 
   return (
     <div className="container">
@@ -1810,7 +2059,9 @@ function MainApp({ accessLevel, onLogout }) {
           {candidates.length > 0 && (
             <div className="card">
               <h2>Duplicate Candidates ({filteredCandidates.length})</h2>
-              <div className="filter-controls">
+
+              {/* Filter Controls */}
+              <div className="filter-controls" style={{ marginBottom: '10px' }}>
                 <select value={tierFilter} onChange={e => setTierFilter(e.target.value)}>
                   <option value="all">All Tiers</option>
                   <option value="1">Tier 1 - Definitive</option>
@@ -1820,17 +2071,127 @@ function MainApp({ accessLevel, onLogout }) {
                 </select>
                 <select value={bahrFilter} onChange={e => setBahrFilter(e.target.value)}>
                   <option value="all">All Clients</option>
-                  <option value="yes">Bahr Clients Only</option>
+                  <option value="yes">Bahr Client = T Only</option>
                   <option value="no">Non-Bahr Clients Only</option>
                 </select>
                 <input type="text" value={searchFilter} onChange={e => setSearchFilter(e.target.value)} placeholder="Search by name or ID..." />
               </div>
+
+              {/* Date Filter */}
+              <div className="filter-controls" style={{ marginBottom: '15px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <label style={{ color: '#94a3b8', fontSize: '0.9em', whiteSpace: 'nowrap' }}>Created From:</label>
+                  <input
+                    type="date"
+                    value={createdDateFrom}
+                    onChange={e => setCreatedDateFrom(e.target.value)}
+                    style={{ width: 'auto', minWidth: '140px' }}
+                  />
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <label style={{ color: '#94a3b8', fontSize: '0.9em', whiteSpace: 'nowrap' }}>To:</label>
+                  <input
+                    type="date"
+                    value={createdDateTo}
+                    onChange={e => setCreatedDateTo(e.target.value)}
+                    style={{ width: 'auto', minWidth: '140px' }}
+                  />
+                </div>
+                {(createdDateFrom || createdDateTo) && (
+                  <button
+                    className="secondary small"
+                    onClick={() => { setCreatedDateFrom(''); setCreatedDateTo(''); }}
+                  >
+                    Clear Dates
+                  </button>
+                )}
+              </div>
+
+              {/* Bulk Merge Controls */}
+              <div style={{
+                background: 'rgba(99, 102, 241, 0.1)',
+                border: '1px solid rgba(99, 102, 241, 0.3)',
+                borderRadius: '8px',
+                padding: '15px',
+                marginBottom: '15px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '10px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                  <label className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={selectedForBulkMerge.size === filteredCandidates.length && filteredCandidates.length > 0}
+                      onChange={toggleSelectAll}
+                      disabled={bulkMerging}
+                    />
+                    Select All ({filteredCandidates.length})
+                  </label>
+                  <span style={{ color: '#a5b4fc', fontWeight: '500' }}>
+                    {selectedForBulkMerge.size} selected
+                  </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  {bulkMerging && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div className="progress-bar" style={{ width: '150px' }}>
+                        <div
+                          className="fill"
+                          style={{ width: `${(bulkMergeProgress.current / bulkMergeProgress.total) * 100}%` }}
+                        />
+                      </div>
+                      <span style={{ color: '#94a3b8', fontSize: '0.85em' }}>
+                        {bulkMergeProgress.current}/{bulkMergeProgress.total}
+                      </span>
+                    </div>
+                  )}
+                  <button
+                    className="danger"
+                    onClick={handleBulkMerge}
+                    disabled={bulkMerging || selectedForBulkMerge.size === 0}
+                  >
+                    {bulkMerging ? 'Merging...' : `Bulk Merge (${selectedForBulkMerge.size})`}
+                  </button>
+                </div>
+              </div>
+
+              {selectedForBulkMerge.size > 0 && !bulkMerging && (
+                <div style={{
+                  background: 'rgba(245, 158, 11, 0.1)',
+                  border: '1px solid rgba(245, 158, 11, 0.3)',
+                  borderRadius: '8px',
+                  padding: '12px 15px',
+                  marginBottom: '15px',
+                  fontSize: '0.9em',
+                  color: '#f59e0b'
+                }}>
+                  <strong>Bulk Merge will:</strong>
+                  <ul style={{ margin: '8px 0 0 20px', lineHeight: '1.6' }}>
+                    <li>Merge {selectedForBulkMerge.size} duplicate records into their survivors</li>
+                    <li>Auto-download a CSV backup of all deleted records</li>
+                    <li>Store complete history in dedupe_history for undo capability</li>
+                  </ul>
+                </div>
+              )}
               <div className="table-container">
                 <table>
                   <thead>
                     <tr>
+                      <th style={{ width: '40px' }}>
+                        <input
+                          type="checkbox"
+                          checked={selectedForBulkMerge.size === filteredCandidates.length && filteredCandidates.length > 0}
+                          onChange={toggleSelectAll}
+                          disabled={bulkMerging}
+                          title="Select all"
+                        />
+                      </th>
                       <th>Confidence</th>
                       <th>Bahr Client</th>
+                      <th>Created</th>
                       <th>Keep (Record A)</th>
                       <th>Merge (Record B)</th>
                       <th>Match Reasons</th>
@@ -1838,35 +2199,60 @@ function MainApp({ accessLevel, onLogout }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredCandidates.map(c => (
-                      <tr key={c.id} className="clickable" onClick={() => setSelectedCandidate(c)}>
-                        <td>
-                          <span className={`badge tier${c.tier.tier}`}>{c.confidence}%</span>
-                          <div style={{ fontSize: '0.75em', color: '#94a3b8' }}>{c.tier.name}</div>
-                        </td>
-                        <td>
-                          {(c.survivor.record.fields['Bahr Client'] || c.merged.record.fields['Bahr Client']) ? (
-                            <span style={{ background: '#6366f1', color: 'white', padding: '2px 8px', borderRadius: '4px', fontSize: '0.8em' }}>Yes</span>
-                          ) : (
-                            <span style={{ color: '#64748b', fontSize: '0.8em' }}>No</span>
-                          )}
-                        </td>
-                        <td>
-                          <div style={{ fontWeight: '500' }}>{c.survivor.name}</div>
-                          <div style={{ fontSize: '0.75em', color: '#94a3b8' }}>Score: {c.survivor.score}</div>
-                        </td>
-                        <td>
-                          <div>{c.merged.name}</div>
-                          <div style={{ fontSize: '0.75em', color: '#94a3b8' }}>Score: {c.merged.score}</div>
-                        </td>
-                        <td>
-                          {c.reasons.slice(0, 2).map((r, i) => <span key={i} className="reason-tag">{r}</span>)}
-                          {c.reasons.length > 2 && <span className="reason-tag">+{c.reasons.length - 2}</span>}
-                          {c.conflicts?.map((cf, i) => <span key={i} className="reason-tag conflict">{cf}</span>)}
-                        </td>
-                        <td><button className="primary small">Review</button></td>
-                      </tr>
-                    ))}
+                    {filteredCandidates.map(c => {
+                      const survivorCreated = c.survivor.record.fields['Created'] || c.survivor.record.fields['createdTime'];
+                      const mergedCreated = c.merged.record.fields['Created'] || c.merged.record.fields['createdTime'];
+                      const displayDate = survivorCreated || mergedCreated;
+                      const isTier4 = c.tier.tier === 4;
+
+                      return (
+                        <tr key={c.id} className="clickable" style={selectedForBulkMerge.has(c.id) ? { background: 'rgba(99, 102, 241, 0.15)' } : {}}>
+                          <td onClick={e => e.stopPropagation()}>
+                            <input
+                              type="checkbox"
+                              checked={selectedForBulkMerge.has(c.id)}
+                              onChange={() => toggleBulkSelect(c.id)}
+                              disabled={bulkMerging || isTier4}
+                              title={isTier4 ? "Tier 4 conflicts must be reviewed individually" : "Select for bulk merge"}
+                            />
+                          </td>
+                          <td onClick={() => setSelectedCandidate(c)}>
+                            <span className={`badge tier${c.tier.tier}`}>{c.confidence}%</span>
+                            <div style={{ fontSize: '0.75em', color: '#94a3b8' }}>{c.tier.name}</div>
+                          </td>
+                          <td onClick={() => setSelectedCandidate(c)}>
+                            {(c.survivor.record.fields['Bahr Client'] || c.merged.record.fields['Bahr Client']) ? (
+                              <span style={{ background: '#6366f1', color: 'white', padding: '2px 8px', borderRadius: '4px', fontSize: '0.8em' }}>T</span>
+                            ) : (
+                              <span style={{ color: '#64748b', fontSize: '0.8em' }}>-</span>
+                            )}
+                          </td>
+                          <td onClick={() => setSelectedCandidate(c)}>
+                            {displayDate ? (
+                              <span style={{ fontSize: '0.8em', color: '#94a3b8' }}>
+                                {new Date(displayDate).toLocaleDateString()}
+                              </span>
+                            ) : (
+                              <span style={{ color: '#64748b', fontSize: '0.8em' }}>-</span>
+                            )}
+                          </td>
+                          <td onClick={() => setSelectedCandidate(c)}>
+                            <div style={{ fontWeight: '500' }}>{c.survivor.name}</div>
+                            <div style={{ fontSize: '0.75em', color: '#94a3b8' }}>Score: {c.survivor.score}</div>
+                          </td>
+                          <td onClick={() => setSelectedCandidate(c)}>
+                            <div>{c.merged.name}</div>
+                            <div style={{ fontSize: '0.75em', color: '#94a3b8' }}>Score: {c.merged.score}</div>
+                          </td>
+                          <td onClick={() => setSelectedCandidate(c)}>
+                            {c.reasons.slice(0, 2).map((r, i) => <span key={i} className="reason-tag">{r}</span>)}
+                            {c.reasons.length > 2 && <span className="reason-tag">+{c.reasons.length - 2}</span>}
+                            {c.conflicts?.map((cf, i) => <span key={i} className="reason-tag conflict">{cf}</span>)}
+                          </td>
+                          <td><button className="primary small" onClick={() => setSelectedCandidate(c)}>Review</button></td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
