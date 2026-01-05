@@ -61,6 +61,12 @@
       color: #b45309;
     }
 
+    .badge-unmerged {
+      background: #f0fdf4;
+      color: #15803d;
+      border: 1px solid #86efac;
+    }
+
     .merge-meta {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -314,32 +320,316 @@
       font-weight: 500;
     }
 
-    .collapsible-header {
-      cursor: pointer;
+    /* Merged Records Section */
+    .merged-records-section {
+      margin-top: 16px;
+      border-top: 1px solid #e2e8f0;
+      padding-top: 16px;
+    }
+
+    .merged-record-item {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 14px;
+      margin-bottom: 10px;
+    }
+
+    .merged-record-item.unmerged {
+      background: #f0fdf4;
+      border-color: #86efac;
+    }
+
+    .merged-record-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
+      margin-bottom: 10px;
     }
 
-    .collapsible-header:hover {
-      opacity: 0.8;
+    .merged-record-name {
+      font-weight: 500;
+      color: #1e293b;
+      font-size: 14px;
     }
 
-    .chevron {
-      transition: transform 0.2s;
+    .merged-record-id {
+      font-size: 11px;
+      color: #64748b;
+      font-family: monospace;
     }
 
-    .chevron.expanded {
-      transform: rotate(180deg);
+    .merged-record-fields {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 8px;
+      font-size: 12px;
     }
 
-    .collapsible-content {
-      overflow: hidden;
-      transition: max-height 0.3s ease-out;
+    .merged-field {
+      color: #64748b;
     }
 
-    .collapsible-content.collapsed {
-      max-height: 0;
+    .merged-field strong {
+      color: #475569;
+    }
+
+    /* Undo Button Styles */
+    .undo-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      border: none;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .undo-btn svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    .undo-btn-primary {
+      background: #fef3c7;
+      color: #b45309;
+      border: 1px solid #fcd34d;
+    }
+
+    .undo-btn-primary:hover {
+      background: #fde68a;
+    }
+
+    .undo-btn-primary:disabled {
+      background: #f1f5f9;
+      color: #94a3b8;
+      border-color: #e2e8f0;
+      cursor: not-allowed;
+    }
+
+    .undo-btn-success {
+      background: #dcfce7;
+      color: #15803d;
+      border: 1px solid #86efac;
+      cursor: default;
+    }
+
+    /* Status Messages */
+    .status-message {
+      padding: 10px 14px;
+      border-radius: 6px;
+      font-size: 13px;
+      margin-top: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .status-message svg {
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
+    }
+
+    .status-info {
+      background: #dbeafe;
+      color: #1d4ed8;
+      border: 1px solid #93c5fd;
+    }
+
+    .status-success {
+      background: #dcfce7;
+      color: #15803d;
+      border: 1px solid #86efac;
+    }
+
+    .status-error {
+      background: #fef2f2;
+      color: #b91c1c;
+      border: 1px solid #fecaca;
+    }
+
+    .status-warning {
+      background: #fef3c7;
+      color: #b45309;
+      border: 1px solid #fcd34d;
+    }
+
+    /* Confirmation Dialog */
+    .confirm-dialog-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+
+    .confirm-dialog {
+      background: white;
+      border-radius: 12px;
+      padding: 24px;
+      max-width: 450px;
+      width: 90%;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+    }
+
+    .confirm-dialog-title {
+      font-size: 18px;
+      font-weight: 600;
+      color: #1e293b;
+      margin-bottom: 12px;
+    }
+
+    .confirm-dialog-message {
+      color: #64748b;
+      font-size: 14px;
+      margin-bottom: 20px;
+      line-height: 1.6;
+    }
+
+    .confirm-dialog-actions {
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+    }
+
+    .confirm-dialog-btn {
+      padding: 10px 20px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s;
+    }
+
+    .confirm-dialog-btn-cancel {
+      background: #f1f5f9;
+      color: #475569;
+    }
+
+    .confirm-dialog-btn-cancel:hover {
+      background: #e2e8f0;
+    }
+
+    .confirm-dialog-btn-confirm {
+      background: #f59e0b;
+      color: white;
+    }
+
+    .confirm-dialog-btn-confirm:hover {
+      background: #d97706;
+    }
+
+    /* Unmerge Info Display */
+    .unmerge-info {
+      background: #f0fdf4;
+      border: 1px solid #86efac;
+      border-radius: 6px;
+      padding: 10px 14px;
+      margin-top: 10px;
+      font-size: 12px;
+    }
+
+    .unmerge-info-label {
+      color: #15803d;
+      font-weight: 500;
+      margin-bottom: 4px;
+    }
+
+    .unmerge-info-details {
+      color: #64748b;
+    }
+
+    .unmerge-info-details a {
+      color: #15803d;
+      text-decoration: none;
+    }
+
+    .unmerge-info-details a:hover {
+      text-decoration: underline;
+    }
+
+    /* Loading Spinner */
+    .spinner {
+      width: 14px;
+      height: 14px;
+      border: 2px solid #fcd34d;
+      border-top-color: #b45309;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Config Panel */
+    .config-panel {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+
+    .config-panel-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #475569;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .config-panel-title svg {
+      width: 16px;
+      height: 16px;
+    }
+
+    .config-field {
+      margin-bottom: 12px;
+    }
+
+    .config-field:last-child {
+      margin-bottom: 0;
+    }
+
+    .config-label {
+      display: block;
+      font-size: 12px;
+      color: #64748b;
+      margin-bottom: 4px;
+    }
+
+    .config-input {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      font-size: 13px;
+      color: #1e293b;
+    }
+
+    .config-input:focus {
+      outline: none;
+      border-color: #6366f1;
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+    }
+
+    .config-hint {
+      font-size: 11px;
+      color: #94a3b8;
+      margin-top: 4px;
     }
   </style>
 </head>
@@ -350,7 +640,9 @@
     (function() {
       'use strict';
 
-      // Configuration - customize these selectors to match your Softr setup
+      // ============================================
+      // CONFIGURATION
+      // ============================================
       const CONFIG = {
         // Selectors to look for merge data
         selectors: [
@@ -367,18 +659,171 @@
         // Poll interval for dynamic content (ms), set to 0 to disable
         pollInterval: 1000,
         // Max polls before giving up
-        maxPolls: 30
+        maxPolls: 30,
+        // Airtable configuration (can be set via window.AIRTABLE_CONFIG)
+        airtable: {
+          apiKey: '',
+          baseId: '',
+          tableName: ''
+        }
       };
 
-      // Icons
+      // State management
+      const STATE = {
+        currentData: null,
+        survivorRecordId: null,
+        credentials: null,
+        pendingUnmerge: null,
+        logs: []
+      };
+
+      // ============================================
+      // ICONS
+      // ============================================
       const ICONS = {
         box: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>`,
         check: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>`,
         merge: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/></svg>`,
-        chevron: `<svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><polyline points="6 9 12 15 18 9"/></svg>`
+        undo: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg>`,
+        settings: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>`,
+        warning: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
+        info: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>`,
+        success: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`,
+        error: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>`
       };
 
-      // Parse merge data from text
+      // ============================================
+      // AIRTABLE CLIENT
+      // ============================================
+      class AirtableClient {
+        constructor(apiKey, baseId) {
+          this.apiKey = apiKey;
+          this.baseId = baseId;
+          this.baseUrl = `https://api.airtable.com/v0/${baseId}`;
+        }
+
+        async request(url, options = {}) {
+          const response = await fetch(url, {
+            ...options,
+            headers: {
+              'Authorization': `Bearer ${this.apiKey}`,
+              'Content-Type': 'application/json',
+              ...options.headers
+            }
+          });
+
+          if (!response.ok) {
+            const error = await response.json().catch(() => ({}));
+            throw new Error(error.error?.message || `HTTP ${response.status}`);
+          }
+
+          return response.json();
+        }
+
+        async getRecord(tableName, recordId) {
+          return this.request(`${this.baseUrl}/${encodeURIComponent(tableName)}/${recordId}`);
+        }
+
+        async createRecord(tableName, fields) {
+          return this.request(`${this.baseUrl}/${encodeURIComponent(tableName)}`, {
+            method: 'POST',
+            body: JSON.stringify({ fields })
+          });
+        }
+
+        async updateRecord(tableName, recordId, fields) {
+          return this.request(`${this.baseUrl}/${encodeURIComponent(tableName)}/${recordId}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ fields })
+          });
+        }
+      }
+
+      // ============================================
+      // HELPER FUNCTIONS
+      // ============================================
+      function parseDedupeHistory(historyField) {
+        if (!historyField) return [];
+        try {
+          const parsed = JSON.parse(historyField);
+          return Array.isArray(parsed) ? parsed : [];
+        } catch (err) {
+          console.warn('Failed to parse dedupe history:', err.message);
+          return [];
+        }
+      }
+
+      function updateDedupeHistorySafely(existingHistoryField, updateFn) {
+        let existingHistory;
+        try {
+          existingHistory = existingHistoryField ? JSON.parse(existingHistoryField) : [];
+          if (!Array.isArray(existingHistory)) {
+            throw new Error('History is not an array');
+          }
+        } catch (err) {
+          throw new Error(`Cannot parse existing history: ${err.message}`);
+        }
+
+        const previousCount = existingHistory.length;
+        const updatedHistory = updateFn([...existingHistory]);
+
+        if (updatedHistory.length < previousCount) {
+          throw new Error(`Append-only violation: history shrank from ${previousCount} to ${updatedHistory.length}`);
+        }
+
+        return JSON.stringify(updatedHistory, null, 2);
+      }
+
+      function formatTimestamp(ts) {
+        try {
+          const date = new Date(ts);
+          return date.toLocaleString('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+          });
+        } catch (e) {
+          return ts;
+        }
+      }
+
+      function extractBoxFolderId(url) {
+        if (!url) return null;
+        const match = url.match(/folder\/(\d+)/);
+        return match ? match[1] : null;
+      }
+
+      function getMergedRecordName(mergedRecord) {
+        const fields = mergedRecord.field_snapshot || {};
+        return fields['Full_Name_Normal_Pretty'] ||
+               fields['Client Name'] ||
+               [fields['First Name'], fields['Middle Name'], fields['Family Name']].filter(Boolean).join(' ') ||
+               mergedRecord.original_record_id ||
+               'Unknown';
+      }
+
+      function isRecordUnmerged(entry, mergedRecordIdx) {
+        if (!entry.unmerged_records) return false;
+        const mergedRecord = entry.merged_records[mergedRecordIdx];
+        return entry.unmerged_records.some(
+          u => u.original_record_id === mergedRecord.original_record_id
+        );
+      }
+
+      function getUnmergeInfo(entry, mergedRecordIdx) {
+        if (!entry.unmerged_records) return null;
+        const mergedRecord = entry.merged_records[mergedRecordIdx];
+        return entry.unmerged_records.find(
+          u => u.original_record_id === mergedRecord.original_record_id
+        );
+      }
+
+      // ============================================
+      // PARSE MERGE DATA
+      // ============================================
       function parseMergeData(text) {
         if (!text || typeof text !== 'string') return null;
 
@@ -417,31 +862,178 @@
         return null;
       }
 
-      // Format timestamp
-      function formatTimestamp(ts) {
+      // ============================================
+      // UNMERGE FUNCTIONALITY
+      // ============================================
+      async function performUnmerge(entryIndex, mergedRecordIndex) {
+        const creds = STATE.credentials;
+        if (!creds?.apiKey || !creds?.baseId || !creds?.tableName) {
+          showStatus('error', 'Airtable credentials not configured. Set apiKey, baseId, and tableName.');
+          return false;
+        }
+
+        if (!STATE.survivorRecordId) {
+          showStatus('error', 'Survivor record ID not found. Cannot perform unmerge.');
+          return false;
+        }
+
+        const entry = STATE.currentData?.data?.[entryIndex];
+        if (!entry) {
+          showStatus('error', 'Merge entry not found');
+          return false;
+        }
+
+        const mergedRecord = entry.merged_records?.[mergedRecordIndex];
+        if (!mergedRecord?.field_snapshot) {
+          showStatus('error', 'Cannot unmerge: no field snapshot available for this record');
+          return false;
+        }
+
         try {
-          const date = new Date(ts);
-          return date.toLocaleString('en-US', {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit'
+          const client = new AirtableClient(creds.apiKey, creds.baseId);
+
+          showStatus('info', `Restoring record: ${getMergedRecordName(mergedRecord)}...`);
+
+          // Prepare fields to restore (remove computed fields)
+          const fieldsToRestore = { ...mergedRecord.field_snapshot };
+          delete fieldsToRestore.dedupe_history;
+          // Remove any formula/computed fields that can't be written
+          delete fieldsToRestore.Full_Name_Normal_Pretty;
+          delete fieldsToRestore['Client Name'];
+
+          // Create the restored record
+          const restored = await client.createRecord(creds.tableName, fieldsToRestore);
+          showStatus('info', `Record restored with new ID: ${restored.id}`);
+
+          // Fetch fresh history from Airtable
+          showStatus('info', 'Updating merge history...');
+          const freshRecord = await client.getRecord(creds.tableName, STATE.survivorRecordId);
+          const currentHistoryField = freshRecord?.fields?.dedupe_history;
+
+          // Update history safely
+          const updatedHistoryJson = updateDedupeHistorySafely(currentHistoryField, (historyArray) => {
+            const targetEvent = historyArray.find(e => e.merge_id === entry.merge_id);
+            if (!targetEvent) {
+              throw new Error('Cannot find merge event in current history');
+            }
+            if (!targetEvent.unmerged_records) {
+              targetEvent.unmerged_records = [];
+            }
+            targetEvent.unmerged_records.push({
+              original_record_id: mergedRecord.original_record_id,
+              restored_record_id: restored.id,
+              unmerged_at: new Date().toISOString(),
+              unmerged_by: 'softr_viewer'
+            });
+            return historyArray;
           });
-        } catch (e) {
-          return ts;
+
+          // Update the survivor record's history
+          await client.updateRecord(creds.tableName, STATE.survivorRecordId, {
+            dedupe_history: updatedHistoryJson
+          });
+
+          // Update local state
+          STATE.currentData.data = parseDedupeHistory(updatedHistoryJson);
+
+          showStatus('success', `Unmerge completed! New record ID: ${restored.id}`);
+
+          // Re-render the viewer
+          setTimeout(() => {
+            const container = document.getElementById(CONFIG.targetId);
+            if (container) {
+              container.innerHTML = renderMergeViewer(STATE.currentData);
+            }
+          }, 2000);
+
+          return true;
+
+        } catch (err) {
+          showStatus('error', `Unmerge failed: ${err.message}`);
+          return false;
         }
       }
 
-      // Extract Box folder ID from URL
-      function extractBoxFolderId(url) {
-        if (!url) return null;
-        const match = url.match(/folder\/(\d+)/);
-        return match ? match[1] : null;
+      function showConfirmDialog(entryIndex, mergedRecordIndex) {
+        const entry = STATE.currentData?.data?.[entryIndex];
+        const mergedRecord = entry?.merged_records?.[mergedRecordIndex];
+
+        if (!mergedRecord) return;
+
+        const name = getMergedRecordName(mergedRecord);
+
+        STATE.pendingUnmerge = { entryIndex, mergedRecordIndex };
+
+        const overlay = document.createElement('div');
+        overlay.className = 'confirm-dialog-overlay';
+        overlay.id = 'confirm-dialog-overlay';
+        overlay.innerHTML = `
+          <div class="confirm-dialog">
+            <div class="confirm-dialog-title">Undo Merge?</div>
+            <div class="confirm-dialog-message">
+              This will restore <strong>"${name}"</strong> as a separate record in Airtable.
+              <br><br>
+              <strong>Important:</strong> The survivor record will keep all its current data.
+              The restored record will be created from the snapshot taken at merge time.
+              Any new data added to the survivor after the merge will NOT be affected.
+            </div>
+            <div class="confirm-dialog-actions">
+              <button class="confirm-dialog-btn confirm-dialog-btn-cancel" onclick="window.MergeViewer.cancelUnmerge()">Cancel</button>
+              <button class="confirm-dialog-btn confirm-dialog-btn-confirm" onclick="window.MergeViewer.confirmUnmerge()">Restore Record</button>
+            </div>
+          </div>
+        `;
+
+        document.body.appendChild(overlay);
       }
 
-      // Render simple merge info
+      function cancelUnmerge() {
+        STATE.pendingUnmerge = null;
+        const overlay = document.getElementById('confirm-dialog-overlay');
+        if (overlay) overlay.remove();
+      }
+
+      async function confirmUnmerge() {
+        if (!STATE.pendingUnmerge) return;
+
+        const { entryIndex, mergedRecordIndex } = STATE.pendingUnmerge;
+        cancelUnmerge();
+
+        // Update button to show loading
+        const btn = document.querySelector(`[data-unmerge="${entryIndex}-${mergedRecordIndex}"]`);
+        if (btn) {
+          btn.disabled = true;
+          btn.innerHTML = `<span class="spinner"></span> Restoring...`;
+        }
+
+        await performUnmerge(entryIndex, mergedRecordIndex);
+      }
+
+      function showStatus(type, message) {
+        const container = document.getElementById(CONFIG.targetId);
+        if (!container) return;
+
+        // Remove existing status
+        const existing = container.querySelector('.status-message');
+        if (existing) existing.remove();
+
+        const icon = ICONS[type] || ICONS.info;
+        const statusDiv = document.createElement('div');
+        statusDiv.className = `status-message status-${type}`;
+        statusDiv.innerHTML = `${icon}<span>${message}</span>`;
+
+        // Insert at top of container
+        container.insertBefore(statusDiv, container.firstChild);
+
+        // Auto-remove success/info messages after delay
+        if (type === 'success' || type === 'info') {
+          setTimeout(() => statusDiv.remove(), 5000);
+        }
+      }
+
+      // ============================================
+      // RENDER FUNCTIONS
+      // ============================================
       function renderSimpleMerge(data) {
         const targetId = extractBoxFolderId(data.targetUrl);
         const mergedId = extractBoxFolderId(data.mergedFromUrl);
@@ -457,17 +1049,13 @@
               <div class="box-link-item">
                 <span class="box-link-label">Target folder:</span>
                 <span class="box-link-value">
-                  <a href="${data.targetUrl}" target="_blank" rel="noopener">
-                    ${targetId || 'Open folder'}
-                  </a>
+                  <a href="${data.targetUrl}" target="_blank" rel="noopener">${targetId || 'Open folder'}</a>
                 </span>
               </div>
               <div class="box-link-item">
                 <span class="box-link-label">Merged from:</span>
                 <span class="box-link-value">
-                  <a href="${data.mergedFromUrl}" target="_blank" rel="noopener">
-                    ${mergedId || 'Open folder'}
-                  </a>
+                  <a href="${data.mergedFromUrl}" target="_blank" rel="noopener">${mergedId || 'Open folder'}</a>
                 </span>
               </div>
               ${data.hasAuditFolder ? `
@@ -482,7 +1070,6 @@
         `;
       }
 
-      // Render field decisions table
       function renderFieldDecisions(decisions) {
         if (!decisions || Object.keys(decisions).length === 0) return '';
 
@@ -509,7 +1096,6 @@
         `;
       }
 
-      // Render Box info section
       function renderBoxInfo(mergeData) {
         const boxLink = mergeData.box_shared_link;
         const boxFolderId = mergeData.Box_Folder_ID;
@@ -517,7 +1103,6 @@
 
         const decisions = mergeData.field_decisions || {};
         const survivorBoxLink = decisions.box_shared_link?.value;
-        const deletedBoxLink = decisions.deleteFromMerged;
 
         if (!boxLink && !boxFolderId && !survivorBoxLink) return '';
 
@@ -539,10 +1124,7 @@
 
         return `
           <div class="box-info">
-            <div class="box-info-title">
-              ${ICONS.box}
-              Box Integration
-            </div>
+            <div class="box-info-title">${ICONS.box} Box Integration</div>
             <div class="box-links">
               ${links.map(link => `
                 <div class="box-link-item">
@@ -560,7 +1142,66 @@
         `;
       }
 
-      // Render single merge entry
+      function renderMergedRecords(entry, entryIndex) {
+        const mergedRecords = entry.merged_records || [];
+        if (mergedRecords.length === 0) return '';
+
+        const hasCredentials = STATE.credentials?.apiKey && STATE.credentials?.baseId && STATE.credentials?.tableName;
+
+        const recordsHtml = mergedRecords.map((mr, mIdx) => {
+          const name = getMergedRecordName(mr);
+          const isUnmerged = isRecordUnmerged(entry, mIdx);
+          const unmergeInfo = getUnmergeInfo(entry, mIdx);
+          const fields = mr.field_snapshot || {};
+
+          return `
+            <div class="merged-record-item ${isUnmerged ? 'unmerged' : ''}">
+              <div class="merged-record-header">
+                <div>
+                  <div class="merged-record-name">${name}</div>
+                  <div class="merged-record-id">Original ID: ${mr.original_record_id || 'unknown'}</div>
+                </div>
+                ${isUnmerged ? `
+                  <span class="merge-badge badge-unmerged">${ICONS.check} Restored</span>
+                ` : `
+                  <button
+                    class="undo-btn undo-btn-primary"
+                    data-unmerge="${entryIndex}-${mIdx}"
+                    onclick="window.MergeViewer.showUnmergeDialog(${entryIndex}, ${mIdx})"
+                    ${!hasCredentials ? 'disabled title="Configure Airtable credentials to enable undo"' : ''}
+                  >
+                    ${ICONS.undo} Undo Merge
+                  </button>
+                `}
+              </div>
+
+              <div class="merged-record-fields">
+                ${fields['DOB'] ? `<div class="merged-field"><strong>DOB:</strong> ${fields['DOB']}</div>` : ''}
+                ${fields['Phone Number'] ? `<div class="merged-field"><strong>Phone:</strong> ${fields['Phone Number']}</div>` : ''}
+                ${fields['A#'] ? `<div class="merged-field"><strong>A#:</strong> ${fields['A#']}</div>` : ''}
+                ${fields['PPID'] ? `<div class="merged-field"><strong>PPID:</strong> ${fields['PPID']}</div>` : ''}
+              </div>
+
+              ${unmergeInfo ? `
+                <div class="unmerge-info">
+                  <div class="unmerge-info-label">${ICONS.success} Restored on ${formatTimestamp(unmergeInfo.unmerged_at)}</div>
+                  <div class="unmerge-info-details">
+                    New record ID: <a href="#" onclick="alert('Record ID: ${unmergeInfo.restored_record_id}')">${unmergeInfo.restored_record_id}</a>
+                  </div>
+                </div>
+              ` : ''}
+            </div>
+          `;
+        }).join('');
+
+        return `
+          <div class="merged-records-section">
+            <div class="section-title">Merged Records (${mergedRecords.length})</div>
+            ${recordsHtml}
+          </div>
+        `;
+      }
+
       function renderMergeEntry(entry, index) {
         const timestamp = formatTimestamp(entry.timestamp);
         const confidence = entry.confidence;
@@ -568,6 +1209,11 @@
         const mergeId = entry.merge_id;
         const survivorId = entry.survivor_record_id;
         const matchReasons = entry.match_reasons || [];
+
+        // Store survivor record ID for unmerge operations
+        if (survivorId && !STATE.survivorRecordId) {
+          STATE.survivorRecordId = survivorId;
+        }
 
         const mergedRecords = entry.merged_records || [];
         const firstMerged = mergedRecords[0] || {};
@@ -578,13 +1224,16 @@
           ? `${fieldSnapshot['First Name']} ${fieldSnapshot['Family Name'] || ''}`.trim()
           : fieldSnapshot.full_name || 'Unknown Client';
 
+        const unmergedCount = entry.unmerged_records?.length || 0;
+
         return `
-          <div class="merge-card">
+          <div class="merge-card" data-merge-id="${mergeId}">
             <div class="merge-header">
               <div class="merge-title">${clientName}</div>
               <div>
                 <span class="merge-badge badge-merge">${action}</span>
                 ${confidence ? `<span class="merge-badge badge-confidence">${confidence}%</span>` : ''}
+                ${unmergedCount > 0 ? `<span class="merge-badge badge-unmerged">${unmergedCount} restored</span>` : ''}
               </div>
             </div>
 
@@ -615,12 +1264,44 @@
             ` : ''}
 
             ${renderFieldDecisions(fieldDecisions)}
+            ${renderMergedRecords(entry, index)}
             ${renderBoxInfo({...entry, ...fieldSnapshot, field_decisions: fieldDecisions})}
           </div>
         `;
       }
 
-      // Render unparsed data
+      function renderConfigPanel() {
+        const creds = STATE.credentials || {};
+        const hasConfig = creds.apiKey && creds.baseId && creds.tableName;
+
+        if (hasConfig) return ''; // Don't show config panel if already configured
+
+        return `
+          <div class="config-panel">
+            <div class="config-panel-title">${ICONS.settings} Airtable Configuration</div>
+            <p style="font-size: 12px; color: #64748b; margin-bottom: 12px;">
+              Configure Airtable credentials to enable undo functionality. Credentials are stored in memory only.
+            </p>
+            <div class="config-field">
+              <label class="config-label">API Key</label>
+              <input type="password" class="config-input" id="config-api-key" placeholder="pat..." value="${creds.apiKey || ''}">
+            </div>
+            <div class="config-field">
+              <label class="config-label">Base ID</label>
+              <input type="text" class="config-input" id="config-base-id" placeholder="app..." value="${creds.baseId || ''}">
+            </div>
+            <div class="config-field">
+              <label class="config-label">Table Name</label>
+              <input type="text" class="config-input" id="config-table-name" placeholder="Clients" value="${creds.tableName || ''}">
+              <div class="config-hint">The table containing your client records</div>
+            </div>
+            <button class="undo-btn undo-btn-primary" style="margin-top: 12px; width: 100%; justify-content: center;" onclick="window.MergeViewer.saveConfig()">
+              Save Configuration
+            </button>
+          </div>
+        `;
+      }
+
       function renderUnparsed(text) {
         return `
           <div class="error-state">
@@ -630,25 +1311,28 @@
         `;
       }
 
-      // Main render function
       function renderMergeViewer(parsed) {
         if (!parsed) {
           return '<div class="no-data">No merge data found</div>';
         }
 
+        const configPanel = renderConfigPanel();
+
         switch (parsed.type) {
           case 'json':
-            return parsed.data.map((entry, i) => renderMergeEntry(entry, i)).join('');
+            return configPanel + parsed.data.map((entry, i) => renderMergeEntry(entry, i)).join('');
           case 'simple':
-            return renderSimpleMerge(parsed.data);
+            return configPanel + renderSimpleMerge(parsed.data);
           case 'unparsed':
-            return renderUnparsed(parsed.data);
+            return configPanel + renderUnparsed(parsed.data);
           default:
             return '<div class="no-data">Unknown data format</div>';
         }
       }
 
-      // Find and process merge data elements
+      // ============================================
+      // INITIALIZATION
+      // ============================================
       function findAndRenderMergeData() {
         const container = document.getElementById(CONFIG.targetId);
         if (!container) return false;
@@ -661,10 +1345,12 @@
             const parsed = parseMergeData(text);
 
             if (parsed) {
+              STATE.currentData = parsed;
+              STATE.survivorRecordId = null; // Reset, will be set during rendering
+
               const html = renderMergeViewer(parsed);
 
               if (CONFIG.mode === 'replace') {
-                // Hide original element and show our viewer
                 el.style.display = 'none';
                 container.innerHTML = html;
               } else {
@@ -679,8 +1365,18 @@
         return false;
       }
 
-      // Initialize with polling for dynamic content
       function init() {
+        // Check for pre-configured Airtable settings
+        if (window.AIRTABLE_CONFIG) {
+          STATE.credentials = { ...window.AIRTABLE_CONFIG };
+        }
+
+        // Also check for Softr logged in user context (if available)
+        if (window.logged_in_user?.airtable_api_key) {
+          STATE.credentials = STATE.credentials || {};
+          STATE.credentials.apiKey = window.logged_in_user.airtable_api_key;
+        }
+
         let pollCount = 0;
 
         function poll() {
@@ -692,14 +1388,13 @@
           }
         }
 
-        // Initial attempt
         if (document.readyState === 'loading') {
           document.addEventListener('DOMContentLoaded', poll);
         } else {
           poll();
         }
 
-        // Also listen for mutations (for SPA/dynamic content)
+        // Listen for mutations (for SPA/dynamic content)
         const observer = new MutationObserver(() => {
           if (!document.querySelector('.merge-card, .simple-merge-info')) {
             findAndRenderMergeData();
@@ -712,19 +1407,67 @@
         });
       }
 
-      // Expose API for manual use
+      function saveConfig() {
+        const apiKey = document.getElementById('config-api-key')?.value?.trim();
+        const baseId = document.getElementById('config-base-id')?.value?.trim();
+        const tableName = document.getElementById('config-table-name')?.value?.trim();
+
+        if (!apiKey || !baseId || !tableName) {
+          showStatus('error', 'All fields are required');
+          return;
+        }
+
+        STATE.credentials = { apiKey, baseId, tableName };
+        showStatus('success', 'Configuration saved!');
+
+        // Re-render to hide config panel
+        const container = document.getElementById(CONFIG.targetId);
+        if (container && STATE.currentData) {
+          container.innerHTML = renderMergeViewer(STATE.currentData);
+        }
+      }
+
+      // ============================================
+      // PUBLIC API
+      // ============================================
       window.MergeViewer = {
         parse: parseMergeData,
         render: renderMergeViewer,
         refresh: findAndRenderMergeData,
+
         renderToElement: function(elementOrId, data) {
           const el = typeof elementOrId === 'string'
             ? document.getElementById(elementOrId)
             : elementOrId;
           if (el) {
-            const parsed = typeof data === 'string' ? parseMergeData(data) : { type: 'json', data: [data] };
+            const parsed = typeof data === 'string' ? parseMergeData(data) : { type: 'json', data: Array.isArray(data) ? data : [data] };
+            STATE.currentData = parsed;
             el.innerHTML = renderMergeViewer(parsed);
           }
+        },
+
+        // Undo merge API
+        showUnmergeDialog: showConfirmDialog,
+        confirmUnmerge: confirmUnmerge,
+        cancelUnmerge: cancelUnmerge,
+        saveConfig: saveConfig,
+
+        // Configure credentials programmatically
+        configure: function(config) {
+          STATE.credentials = { ...config };
+          if (config.survivorRecordId) {
+            STATE.survivorRecordId = config.survivorRecordId;
+          }
+        },
+
+        // Set survivor record ID (useful when embedding)
+        setSurvivorRecordId: function(recordId) {
+          STATE.survivorRecordId = recordId;
+        },
+
+        // Get current state (for debugging)
+        getState: function() {
+          return { ...STATE };
         }
       };
 
