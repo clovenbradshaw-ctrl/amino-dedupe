@@ -1112,8 +1112,16 @@ function MergeReviewModal({ candidate, schema, credentials, onComplete, onSkip, 
         const merged = [...new Set([...(valA || []), ...(valB || [])])];
         decisions[fieldName] = { strategy: 'merge', value: merged, include: merged.length > 0 };
       } else {
-        // Need manual decision
-        decisions[fieldName] = { strategy: 'pending', value: null, include: true, needsDecision: true };
+        // Auto-resolve conflict using smart rules
+        const resolution = autoResolveConflict(fieldName, valA, valB, survivorFields, mergedFields);
+        decisions[fieldName] = {
+          strategy: resolution.strategy,
+          value: resolution.value,
+          include: true,
+          needsDecision: false,
+          autoResolved: true,
+          reason: resolution.reason
+        };
       }
     });
     setFieldDecisions(decisions);
@@ -1247,13 +1255,19 @@ function MergeReviewModal({ candidate, schema, credentials, onComplete, onSkip, 
                   </div>
                   <div
                     className={`diff-cell ${isSame ? 'same' : 'different'} ${decision.strategy === 'keep_a' ? 'selected' : ''} ${!isSame && !isComputed && !isExcluded ? 'clickable' : ''}`}
-                    onClick={() => !isSame && !isComputed && !isExcluded && handlePick(fieldName, 'keep_a')}
+                    onClick={() => !isSame && !isComputed && !isExcluded && setFieldDecisions(prev => ({
+                      ...prev,
+                      [fieldName]: { strategy: 'keep_a', value: valA, include: true, needsDecision: false, autoResolved: false }
+                    }))}
                   >
                     {dispA || <span className="empty-value">(empty)</span>}
                   </div>
                   <div
                     className={`diff-cell ${isSame ? 'same' : 'different'} ${decision.strategy === 'keep_b' ? 'selected' : ''} ${!isSame && !isComputed && !isExcluded ? 'clickable' : ''}`}
-                    onClick={() => !isSame && !isComputed && !isExcluded && handlePick(fieldName, 'keep_b')}
+                    onClick={() => !isSame && !isComputed && !isExcluded && setFieldDecisions(prev => ({
+                      ...prev,
+                      [fieldName]: { strategy: 'keep_b', value: valB, include: true, needsDecision: false, autoResolved: false }
+                    }))}
                   >
                     {dispB || <span className="empty-value">(empty)</span>}
                   </div>
@@ -1264,6 +1278,13 @@ function MergeReviewModal({ candidate, schema, credentials, onComplete, onSkip, 
                       <span className="pick-btn auto">Auto</span>
                     ) : decision.strategy === 'merge' ? (
                       <span className="pick-btn auto">Merged</span>
+                    ) : decision.autoResolved ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                        <span className={`pick-btn ${decision.strategy === 'keep_a' ? 'active' : ''}`} style={{ background: '#10b981', borderColor: '#10b981', color: 'white', cursor: 'default' }}>
+                          {decision.strategy === 'keep_a' ? 'A' : 'B'}
+                        </span>
+                        <span style={{ fontSize: '0.7em', color: '#10b981' }} title={decision.reason}>Auto</span>
+                      </div>
                     ) : (
                       <div className="pick-buttons">
                         <button className={`pick-btn ${decision.strategy === 'keep_a' ? 'active' : ''}`} onClick={() => handlePick(fieldName, 'keep_a')}>A</button>
