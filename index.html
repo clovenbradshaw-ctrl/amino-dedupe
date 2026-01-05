@@ -967,8 +967,14 @@ const scoreMatch = (recordA, recordB) => {
   let confidence = 0;
   let hasIdMatch = false;
 
+  // Different Clio IDs = definitely not a match (null values don't count as different)
+  const clioA = fa['clio_contact_id'], clioB = fb['clio_contact_id'];
+  if (clioA && clioB && clioA !== clioB) {
+    return null; // Definitively not a match
+  }
+
   // Check for ID conflicts first
-  const idFields = ['PPID', 'clio_contact_id', 'A#'];
+  const idFields = ['PPID', 'A#'];
   for (const field of idFields) {
     if (fa[field] && fb[field]) {
       if (fa[field] === fb[field]) {
@@ -978,6 +984,12 @@ const scoreMatch = (recordA, recordB) => {
         conflicts.push(`${field}: "${fa[field]}" vs "${fb[field]}"`);
       }
     }
+  }
+
+  // Check clio_contact_id for matches (conflicts already handled above)
+  if (clioA && clioB && clioA === clioB) {
+    reasons.push('clio_contact_id exact');
+    hasIdMatch = true;
   }
 
   if (conflicts.length > 0) {
@@ -1067,7 +1079,7 @@ const findDuplicateCandidates = (records, onProgress) => {
         processed.add(pairKey);
 
         const match = scoreMatch(group[i].record, group[j].record);
-        if (match.confidence >= 70 || match.isConflict) {
+        if (match && (match.confidence >= 70 || match.isConflict)) {
           const scoreA = scoreRecordQuality(group[i].record);
           const scoreB = scoreRecordQuality(group[j].record);
           const [survivor, merged] = scoreA >= scoreB ? [group[i], group[j]] : [group[j], group[i]];
