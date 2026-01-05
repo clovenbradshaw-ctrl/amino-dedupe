@@ -97,6 +97,8 @@
     tr:hover { background: rgba(99, 102, 241, 0.1); }
     tr.clickable { cursor: pointer; }
     tr.clickable:hover { background: rgba(99, 102, 241, 0.2); }
+    tr.selected { background: rgba(99, 102, 241, 0.25); }
+    tr.selected:hover { background: rgba(99, 102, 241, 0.35); }
 
     .badge {
       display: inline-block;
@@ -585,6 +587,249 @@ const areNamesRelated = (name1, name2) => {
 const generateMergeId = () => 'mrg_' + Math.random().toString(36).substr(2, 9);
 
 // ============================================
+// AUTO-CONFLICT RESOLUTION RULES
+// ============================================
+
+// Normalize phone for comparison (returns 10-digit number)
+const normalizePhoneForComparison = (phone) => {
+  if (!phone) return '';
+  // Remove all non-digits, then take last 10 digits
+  const digits = phone.replace(/\D/g, '');
+  return digits.slice(-10);
+};
+
+// Check if two phone numbers are the same (normalized)
+const phonesMatch = (phoneA, phoneB) => {
+  const normA = normalizePhoneForComparison(phoneA);
+  const normB = normalizePhoneForComparison(phoneB);
+  return normA.length >= 10 && normA === normB;
+};
+
+// Prefer the more formatted phone number
+const preferFormattedPhone = (phoneA, phoneB) => {
+  // If they're the same normalized, prefer the one with more formatting or starts with +1
+  if (phoneB && phoneB.startsWith('+1')) return 'B';
+  if (phoneA && phoneA.startsWith('+1')) return 'A';
+  // Prefer the one with dashes or spaces (formatted)
+  const formatA = (phoneA || '').includes('-') || (phoneA || '').includes(' ');
+  const formatB = (phoneB || '').includes('-') || (phoneB || '').includes(' ');
+  if (formatB && !formatA) return 'B';
+  return 'A'; // Default to survivor
+};
+
+// Auto-resolve field conflicts based on smart rules
+const autoResolveConflict = (fieldName, valA, valB, survivorFields, mergedFields) => {
+  const isEmpty = (v) => v === null || v === undefined || (typeof v === 'string' && !v.trim()) || (Array.isArray(v) && v.length === 0);
+
+  // If one is empty, use the other
+  if (isEmpty(valA) && !isEmpty(valB)) return { strategy: 'keep_b', value: valB };
+  if (!isEmpty(valA) && isEmpty(valB)) return { strategy: 'keep_a', value: valA };
+  if (isEmpty(valA) && isEmpty(valB)) return { strategy: 'keep_a', value: valA };
+
+  // Phone Number: Normalize and compare
+  if (fieldName === 'Phone Number') {
+    if (phonesMatch(valA, valB)) {
+      const pick = preferFormattedPhone(valA, valB);
+      return { strategy: pick === 'A' ? 'keep_a' : 'keep_b', value: pick === 'A' ? valA : valB, reason: 'Same phone (normalized)' };
+    }
+    // Different phones - prefer survivor's (more established record)
+    return { strategy: 'keep_a', value: valA, reason: 'Different phones - keeping survivor' };
+  }
+
+  // Box folder fields: Keep survivor's, track merged one for deletion
+  if (['Box_Folder_ID', 'URL to box folder (not shared)', 'box folder name', 'box share 2.0', 'box_shared_link'].includes(fieldName)) {
+    return { strategy: 'keep_a', value: valA, reason: 'Keeping survivor box folder', deleteFromMerged: valB };
+  }
+
+  // PPID fields: Keep survivor's (primary record identifier)
+  if (fieldName === 'PPID' || fieldName === 'PPID copy') {
+    // Prefer non-empty, then survivor
+    return { strategy: 'keep_a', value: valA, reason: 'PPID conflict - keeping survivor' };
+  }
+
+  // clio_contact_id: Keep survivor's
+  if (fieldName === 'clio_contact_id') {
+    return { strategy: 'keep_a', value: valA, reason: 'Clio ID conflict - keeping survivor' };
+  }
+
+  // smsFolder: Keep survivor's
+  if (fieldName === 'smsFolder') {
+    return { strategy: 'keep_a', value: valA, reason: 'SMS folder conflict - keeping survivor' };
+  }
+
+  // DOB: Keep survivor's if both have values
+  if (fieldName === 'DOB') {
+    return { strategy: 'keep_a', value: valA, reason: 'DOB conflict - keeping survivor' };
+  }
+
+  // Middle Name: Keep survivor's (often just data entry variations)
+  if (fieldName === 'Middle Name') {
+    return { strategy: 'keep_a', value: valA, reason: 'Middle name conflict - keeping survivor' };
+  }
+
+  // Xano Last Updated: Keep more recent timestamp
+  if (fieldName === 'Xano Last Updated') {
+    if (valA && valB) {
+      const dateA = new Date(valA);
+      const dateB = new Date(valB);
+      if (dateB > dateA) return { strategy: 'keep_b', value: valB, reason: 'More recent timestamp' };
+    }
+    return { strategy: 'keep_a', value: valA, reason: 'Timestamp conflict' };
+  }
+
+  // State: Merge arrays, or keep survivor for single values
+  if (fieldName === 'State') {
+    if (Array.isArray(valA) && Array.isArray(valB)) {
+      const merged = [...new Set([...valA, ...valB])];
+      return { strategy: 'merge', value: merged, reason: 'Merged state arrays' };
+    }
+    return { strategy: 'keep_a', value: valA, reason: 'State conflict - keeping survivor' };
+  }
+
+  // Zip codes: Keep survivor's
+  if (fieldName === 'Zip (5)' || fieldName.includes('Zip')) {
+    return { strategy: 'keep_a', value: valA, reason: 'Zip conflict - keeping survivor' };
+  }
+
+  // bahr_import_flatpack_data: Keep survivor's (likely contains more complete data)
+  if (fieldName === 'bahr_import_flatpack_data') {
+    return { strategy: 'keep_a', value: valA, reason: 'Keeping survivor import data' };
+  }
+
+  // box_sync: Keep 'Yes' if either has it
+  if (fieldName === 'box sync') {
+    if (valA === 'Yes' || valA === true) return { strategy: 'keep_a', value: valA, reason: 'Box sync enabled' };
+    if (valB === 'Yes' || valB === true) return { strategy: 'keep_b', value: valB, reason: 'Box sync enabled' };
+    return { strategy: 'keep_a', value: valA };
+  }
+
+  // Email fields: Prefer non-null@blank emails
+  if (fieldName === 'Client Email' || fieldName.includes('Email')) {
+    const aIsBlank = (valA || '').includes('null@blank');
+    const bIsBlank = (valB || '').includes('null@blank');
+    if (aIsBlank && !bIsBlank) return { strategy: 'keep_b', value: valB, reason: 'Valid email' };
+    if (!aIsBlank && bIsBlank) return { strategy: 'keep_a', value: valA, reason: 'Valid email' };
+    return { strategy: 'keep_a', value: valA, reason: 'Email conflict - keeping survivor' };
+  }
+
+  // A# (Alien number): Keep survivor's - this is a critical identifier
+  if (fieldName === 'A#') {
+    return { strategy: 'keep_a', value: valA, reason: 'A# conflict - keeping survivor' };
+  }
+
+  // Default: Keep survivor's value (survivor already has highest quality score)
+  // The merge history stores ALL data from merged record, so nothing is lost
+  return { strategy: 'keep_a', value: valA, reason: 'Keeping survivor value (merged data preserved in history)' };
+};
+
+// Calculate completeness score for a record's fields
+const getRecordCompleteness = (fields) => {
+  if (!fields) return 0;
+  let score = 0;
+  const importantFields = ['First Name', 'Family Name', 'DOB', 'Phone Number', 'Client Email', 'A#', 'PPID', 'Address Line 1', 'City', 'State', 'Country'];
+
+  importantFields.forEach(field => {
+    const val = fields[field];
+    if (val && (typeof val !== 'string' || val.trim())) {
+      score += 10;
+    }
+  });
+
+  // Also count total non-empty fields
+  Object.values(fields).forEach(val => {
+    if (val !== null && val !== undefined) {
+      if (Array.isArray(val) && val.length > 0) score += 1;
+      else if (typeof val === 'string' && val.trim()) score += 1;
+      else if (typeof val === 'number' || typeof val === 'boolean') score += 1;
+    }
+  });
+
+  return score;
+};
+
+// Default webhook URL for Box folder migration
+const DEFAULT_BOX_MIGRATION_WEBHOOK = 'https://n8n.intelechia.com/webhook-test/box-dedup';
+
+// Get all box folder-related fields that would be deleted
+const getBoxFolderDeletions = (fieldDecisions, mergedFields) => {
+  const boxFolderFields = ['Box_Folder_ID', 'URL to box folder (not shared)', 'box folder name', 'box share 2.0', 'box_shared_link'];
+  const deletions = {};
+
+  boxFolderFields.forEach(fieldName => {
+    const decision = fieldDecisions[fieldName];
+    if (decision && decision.deleteFromMerged) {
+      deletions[fieldName] = decision.deleteFromMerged;
+    } else if (mergedFields[fieldName] && fieldDecisions[fieldName]?.strategy !== 'keep_b') {
+      // Track any box folder values from merged record that won't be kept
+      deletions[fieldName] = mergedFields[fieldName];
+    }
+  });
+
+  return Object.keys(deletions).length > 0 ? deletions : null;
+};
+
+// Check if Box folders need migration (both records have different Box folder IDs)
+const getBoxMigrationInfo = (survivorFields, mergedFields) => {
+  const survivorBoxId = survivorFields['Box_Folder_ID'];
+  const mergedBoxId = mergedFields['Box_Folder_ID'];
+
+  // If both have Box folder IDs and they're different, migration is needed
+  if (survivorBoxId && mergedBoxId && survivorBoxId !== mergedBoxId) {
+    return {
+      needsMigration: true,
+      keepBoxFolderId: survivorBoxId,
+      deleteBoxFolderId: mergedBoxId,
+      keepBoxUrl: survivorFields['URL to box folder (not shared)'] || survivorFields['box_shared_link'] || '',
+      deleteBoxUrl: mergedFields['URL to box folder (not shared)'] || mergedFields['box_shared_link'] || '',
+      keepBoxName: survivorFields['box folder name'] || '',
+      deleteBoxName: mergedFields['box folder name'] || ''
+    };
+  }
+
+  // If only merged has box folder, we should migrate it to survivor
+  if (!survivorBoxId && mergedBoxId) {
+    return {
+      needsMigration: false, // No migration needed, we'll just keep merged's folder
+      adoptFolder: true,
+      adoptBoxFolderId: mergedBoxId,
+      adoptBoxUrl: mergedFields['URL to box folder (not shared)'] || mergedFields['box_shared_link'] || '',
+      adoptBoxName: mergedFields['box folder name'] || ''
+    };
+  }
+
+  return { needsMigration: false };
+};
+
+// Send webhook to n8n for Box folder migration
+const sendBoxMigrationWebhook = async (webhookUrl, migrationData) => {
+  const url = webhookUrl || DEFAULT_BOX_MIGRATION_WEBHOOK;
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        action: 'box_folder_migration',
+        timestamp: new Date().toISOString(),
+        ...migrationData
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`Webhook failed: ${response.status}`);
+    }
+
+    const result = await response.json().catch(() => ({}));
+    return { success: true, result };
+  } catch (error) {
+    console.error('Box migration webhook error:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+// ============================================
 // AIRTABLE CLIENT
 // ============================================
 
@@ -837,21 +1082,41 @@ const parseDedupeHistory = (historyField) => {
   } catch { return []; }
 };
 
-const buildMergeHistoryEntry = (survivor, merged, fieldDecisions, matchInfo, notes = '') => ({
-  merge_id: generateMergeId(),
-  timestamp: new Date().toISOString(),
-  action: 'merge',
-  confidence: matchInfo.confidence,
-  match_reasons: matchInfo.reasons,
-  survivor_record_id: survivor.record.id,
-  merged_records: [{
-    original_record_id: merged.record.id,
-    field_snapshot: { ...merged.record.fields },
-  }],
-  field_decisions: fieldDecisions,
-  performed_by: 'user',
-  notes,
-});
+const buildMergeHistoryEntry = (survivor, merged, fieldDecisions, matchInfo, notes = '', boxMigration = null) => {
+  const entry = {
+    merge_id: generateMergeId(),
+    timestamp: new Date().toISOString(),
+    action: 'merge',
+    confidence: matchInfo.confidence,
+    match_reasons: matchInfo.reasons,
+    survivor_record_id: survivor.record.id,
+    merged_records: [{
+      original_record_id: merged.record.id,
+      field_snapshot: { ...merged.record.fields },
+    }],
+    field_decisions: fieldDecisions,
+    performed_by: 'user',
+    notes,
+  };
+
+  // Add box migration info if applicable
+  if (boxMigration) {
+    entry.box_migration = {
+      required: true,
+      keep_folder_id: boxMigration.keepBoxFolderId,
+      delete_folder_id: boxMigration.deleteBoxFolderId,
+      keep_folder_url: boxMigration.keepBoxUrl,
+      delete_folder_url: boxMigration.deleteBoxUrl,
+      webhook_sent: boxMigration.webhookSent,
+      webhook_sent_at: boxMigration.webhookSentAt,
+      webhook_response: boxMigration.webhookResponse,
+      migration_confirmed: boxMigration.migrationConfirmed || false,
+      migration_confirmed_at: boxMigration.migrationConfirmedAt || null
+    };
+  }
+
+  return entry;
+};
 
 // ============================================
 // LOGIN COMPONENT
@@ -899,12 +1164,18 @@ function LoginScreen({ onLogin }) {
 // ============================================
 
 function MergeReviewModal({ candidate, schema, credentials, onComplete, onSkip, onClose, addLog }) {
-  const [fieldDecisions, setFieldDecisions] = useState({});
   const [notes, setNotes] = useState('');
   const [merging, setMerging] = useState(false);
+  const [userOverrides, setUserOverrides] = useState({});
 
   const survivorFields = candidate.survivor.record.fields || {};
   const mergedFields = candidate.merged.record.fields || {};
+
+  // Reset overrides when candidate changes
+  const candidateId = candidate.id;
+  useEffect(() => {
+    setUserOverrides({});
+  }, [candidateId]);
 
   // Get all unique field names
   const allFieldNames = useMemo(() => {
@@ -912,15 +1183,22 @@ function MergeReviewModal({ candidate, schema, credentials, onComplete, onSkip, 
     return Array.from(names).sort();
   }, [survivorFields, mergedFields]);
 
-  // Initialize decisions
-  useEffect(() => {
+  // Compute decisions with auto-resolve - always returns complete decisions
+  const fieldDecisions = useMemo(() => {
     const decisions = {};
+    const isEmpty = (v) => v === null || v === undefined || (typeof v === 'string' && !v.trim()) || (Array.isArray(v) && v.length === 0);
+
     allFieldNames.forEach(fieldName => {
+      // Check for user override first
+      if (userOverrides[fieldName]) {
+        decisions[fieldName] = userOverrides[fieldName];
+        return;
+      }
+
       const isComputed = schema.computedFields.includes(fieldName);
       const isExcluded = EXCLUDE_FROM_MERGE.includes(fieldName);
       const valA = survivorFields[fieldName];
       const valB = mergedFields[fieldName];
-      const isEmpty = (v) => v === null || v === undefined || (typeof v === 'string' && !v.trim()) || (Array.isArray(v) && v.length === 0);
 
       if (isComputed || isExcluded) {
         decisions[fieldName] = { strategy: 'skip', value: null, include: false };
@@ -935,19 +1213,27 @@ function MergeReviewModal({ candidate, schema, credentials, onComplete, onSkip, 
         const merged = [...new Set([...(valA || []), ...(valB || [])])];
         decisions[fieldName] = { strategy: 'merge', value: merged, include: merged.length > 0 };
       } else {
-        // Need manual decision
-        decisions[fieldName] = { strategy: 'pending', value: null, include: true, needsDecision: true };
+        // Auto-resolve conflict using smart rules
+        const resolution = autoResolveConflict(fieldName, valA, valB, survivorFields, mergedFields);
+        decisions[fieldName] = {
+          strategy: resolution.strategy,
+          value: resolution.value,
+          include: true,
+          needsDecision: false,
+          autoResolved: true,
+          reason: resolution.reason
+        };
       }
     });
-    setFieldDecisions(decisions);
-  }, [candidate, schema]);
+    return decisions;
+  }, [allFieldNames, survivorFields, mergedFields, schema, userOverrides]);
 
   const pendingDecisions = Object.entries(fieldDecisions).filter(([_, d]) => d.needsDecision);
 
   const handlePick = (fieldName, pick) => {
     const valA = survivorFields[fieldName];
     const valB = mergedFields[fieldName];
-    setFieldDecisions(prev => ({
+    setUserOverrides(prev => ({
       ...prev,
       [fieldName]: { strategy: pick, value: pick === 'keep_a' ? valA : valB, include: true, needsDecision: false }
     }));
@@ -963,6 +1249,49 @@ function MergeReviewModal({ candidate, schema, credentials, onComplete, onSkip, 
     try {
       const client = new AirtableClient(credentials.apiKey, credentials.baseId);
 
+      // Check if Box folder migration is needed and send webhook
+      let boxMigrationRecord = null;
+      const boxMigration = getBoxMigrationInfo(survivorFields, mergedFields);
+      if (boxMigration.needsMigration) {
+        addLog(`Box migration needed: ${boxMigration.deleteBoxFolderId} -> ${boxMigration.keepBoxFolderId}`, 'info');
+
+        const webhookResult = await sendBoxMigrationWebhook(null, {
+          survivorRecordId: candidate.survivor.record.id,
+          survivorRecordName: candidate.survivor.name,
+          mergedRecordId: candidate.merged.record.id,
+          mergedRecordName: candidate.merged.name,
+          keepBoxFolderId: boxMigration.keepBoxFolderId,
+          deleteBoxFolderId: boxMigration.deleteBoxFolderId,
+          keepBoxUrl: boxMigration.keepBoxUrl,
+          deleteBoxUrl: boxMigration.deleteBoxUrl,
+          keepBoxName: boxMigration.keepBoxName,
+          deleteBoxName: boxMigration.deleteBoxName
+        });
+
+        // Record webhook result for history
+        boxMigrationRecord = {
+          keepBoxFolderId: boxMigration.keepBoxFolderId,
+          deleteBoxFolderId: boxMigration.deleteBoxFolderId,
+          keepBoxUrl: boxMigration.keepBoxUrl,
+          deleteBoxUrl: boxMigration.deleteBoxUrl,
+          webhookSent: webhookResult.success,
+          webhookSentAt: new Date().toISOString(),
+          webhookResponse: webhookResult.result || null,
+          webhookError: webhookResult.error || null,
+          migrationConfirmed: webhookResult.result?.migrationConfirmed || false,
+          migrationConfirmedAt: webhookResult.result?.migrationConfirmedAt || null
+        };
+
+        if (webhookResult.success) {
+          addLog(`Box migration webhook sent successfully`, 'success');
+          if (webhookResult.result?.migrationConfirmed) {
+            addLog(`Migration confirmed by n8n`, 'success');
+          }
+        } else {
+          addLog(`Box migration webhook failed: ${webhookResult.error}`, 'warning');
+        }
+      }
+
       // Build update payload
       const updateFields = {};
       Object.entries(fieldDecisions).forEach(([fieldName, decision]) => {
@@ -971,8 +1300,8 @@ function MergeReviewModal({ candidate, schema, credentials, onComplete, onSkip, 
         }
       });
 
-      // Build history entry
-      const historyEntry = buildMergeHistoryEntry(candidate.survivor, candidate.merged, fieldDecisions, candidate, notes);
+      // Build history entry with box migration info
+      const historyEntry = buildMergeHistoryEntry(candidate.survivor, candidate.merged, fieldDecisions, candidate, notes, boxMigrationRecord);
       const existingHistory = parseDedupeHistory(survivorFields['dedupe_history']);
       existingHistory.push(historyEntry);
       updateFields['dedupe_history'] = JSON.stringify(existingHistory, null, 2);
@@ -1070,13 +1399,19 @@ function MergeReviewModal({ candidate, schema, credentials, onComplete, onSkip, 
                   </div>
                   <div
                     className={`diff-cell ${isSame ? 'same' : 'different'} ${decision.strategy === 'keep_a' ? 'selected' : ''} ${!isSame && !isComputed && !isExcluded ? 'clickable' : ''}`}
-                    onClick={() => !isSame && !isComputed && !isExcluded && handlePick(fieldName, 'keep_a')}
+                    onClick={() => !isSame && !isComputed && !isExcluded && setUserOverrides(prev => ({
+                      ...prev,
+                      [fieldName]: { strategy: 'keep_a', value: valA, include: true, needsDecision: false, autoResolved: false }
+                    }))}
                   >
                     {dispA || <span className="empty-value">(empty)</span>}
                   </div>
                   <div
                     className={`diff-cell ${isSame ? 'same' : 'different'} ${decision.strategy === 'keep_b' ? 'selected' : ''} ${!isSame && !isComputed && !isExcluded ? 'clickable' : ''}`}
-                    onClick={() => !isSame && !isComputed && !isExcluded && handlePick(fieldName, 'keep_b')}
+                    onClick={() => !isSame && !isComputed && !isExcluded && setUserOverrides(prev => ({
+                      ...prev,
+                      [fieldName]: { strategy: 'keep_b', value: valB, include: true, needsDecision: false, autoResolved: false }
+                    }))}
                   >
                     {dispB || <span className="empty-value">(empty)</span>}
                   </div>
@@ -1087,6 +1422,13 @@ function MergeReviewModal({ candidate, schema, credentials, onComplete, onSkip, 
                       <span className="pick-btn auto">Auto</span>
                     ) : decision.strategy === 'merge' ? (
                       <span className="pick-btn auto">Merged</span>
+                    ) : decision.autoResolved ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                        <span className={`pick-btn ${decision.strategy === 'keep_a' ? 'active' : ''}`} style={{ background: '#10b981', borderColor: '#10b981', color: 'white', cursor: 'default' }}>
+                          {decision.strategy === 'keep_a' ? 'A' : 'B'}
+                        </span>
+                        <span style={{ fontSize: '0.7em', color: '#10b981' }} title={decision.reason}>Auto</span>
+                      </div>
                     ) : (
                       <div className="pick-buttons">
                         <button className={`pick-btn ${decision.strategy === 'keep_a' ? 'active' : ''}`} onClick={() => handlePick(fieldName, 'keep_a')}>A</button>
@@ -1640,6 +1982,336 @@ function HistoryViewer({ credentials, addLog }) {
 }
 
 // ============================================
+// BULK MERGE MODAL
+// ============================================
+
+function BulkMergeModal({ selectedCandidates, schema, credentials, onComplete, onClose, addLog }) {
+  const [merging, setMerging] = useState(false);
+  const [progress, setProgress] = useState({ current: 0, total: 0, status: 'pending' });
+  const [results, setResults] = useState({ success: [], failed: [], boxFoldersToDelete: [] });
+  const [autoResolveAll, setAutoResolveAll] = useState(true);
+
+  const handleBulkMerge = async () => {
+    if (selectedCandidates.length === 0) return;
+
+    setMerging(true);
+    setProgress({ current: 0, total: selectedCandidates.length, status: 'running' });
+    const newResults = { success: [], failed: [], boxFoldersToDelete: [] };
+
+    const client = new AirtableClient(credentials.apiKey, credentials.baseId);
+
+    for (let i = 0; i < selectedCandidates.length; i++) {
+      const candidate = selectedCandidates[i];
+      setProgress({ current: i + 1, total: selectedCandidates.length, status: 'running' });
+
+      try {
+        const survivorFields = candidate.survivor.record.fields || {};
+        const mergedFields = candidate.merged.record.fields || {};
+
+        // Get all unique field names
+        const allFieldNames = new Set([...Object.keys(survivorFields), ...Object.keys(mergedFields)]);
+        const fieldDecisions = {};
+
+        // Auto-resolve all fields
+        allFieldNames.forEach(fieldName => {
+          const isComputed = schema.computedFields.includes(fieldName);
+          const isExcluded = EXCLUDE_FROM_MERGE.includes(fieldName);
+          const valA = survivorFields[fieldName];
+          const valB = mergedFields[fieldName];
+          const isEmpty = (v) => v === null || v === undefined || (typeof v === 'string' && !v.trim()) || (Array.isArray(v) && v.length === 0);
+
+          if (isComputed || isExcluded) {
+            fieldDecisions[fieldName] = { strategy: 'skip', value: null, include: false };
+          } else if (JSON.stringify(valA) === JSON.stringify(valB)) {
+            fieldDecisions[fieldName] = { strategy: 'auto', value: valA, include: !isEmpty(valA) };
+          } else if (isEmpty(valA) && !isEmpty(valB)) {
+            fieldDecisions[fieldName] = { strategy: 'keep_b', value: valB, include: true };
+          } else if (!isEmpty(valA) && isEmpty(valB)) {
+            fieldDecisions[fieldName] = { strategy: 'keep_a', value: valA, include: true };
+          } else if (schema.linkFields.includes(fieldName)) {
+            // Merge link fields
+            const merged = [...new Set([...(valA || []), ...(valB || [])])];
+            fieldDecisions[fieldName] = { strategy: 'merge', value: merged, include: merged.length > 0 };
+          } else {
+            // Auto-resolve conflict using smart rules
+            const resolution = autoResolveConflict(fieldName, valA, valB, survivorFields, mergedFields);
+            fieldDecisions[fieldName] = { ...resolution, include: true };
+          }
+        });
+
+        // Check if Box folder migration is needed and send webhook
+        let boxMigrationRecord = null;
+        const boxMigration = getBoxMigrationInfo(survivorFields, mergedFields);
+        if (boxMigration.needsMigration) {
+          addLog(`Box migration needed: ${boxMigration.deleteBoxFolderId} -> ${boxMigration.keepBoxFolderId}`, 'info');
+
+          const webhookResult = await sendBoxMigrationWebhook(null, {
+            survivorRecordId: candidate.survivor.record.id,
+            survivorRecordName: candidate.survivor.name,
+            mergedRecordId: candidate.merged.record.id,
+            mergedRecordName: candidate.merged.name,
+            keepBoxFolderId: boxMigration.keepBoxFolderId,
+            deleteBoxFolderId: boxMigration.deleteBoxFolderId,
+            keepBoxUrl: boxMigration.keepBoxUrl,
+            deleteBoxUrl: boxMigration.deleteBoxUrl,
+            keepBoxName: boxMigration.keepBoxName,
+            deleteBoxName: boxMigration.deleteBoxName
+          });
+
+          // Record webhook result for history
+          boxMigrationRecord = {
+            keepBoxFolderId: boxMigration.keepBoxFolderId,
+            deleteBoxFolderId: boxMigration.deleteBoxFolderId,
+            keepBoxUrl: boxMigration.keepBoxUrl,
+            deleteBoxUrl: boxMigration.deleteBoxUrl,
+            webhookSent: webhookResult.success,
+            webhookSentAt: new Date().toISOString(),
+            webhookResponse: webhookResult.result || null,
+            webhookError: webhookResult.error || null,
+            migrationConfirmed: webhookResult.result?.migrationConfirmed || false,
+            migrationConfirmedAt: webhookResult.result?.migrationConfirmedAt || null
+          };
+
+          if (webhookResult.success) {
+            addLog(`Box migration webhook sent successfully`, 'success');
+            if (webhookResult.result?.migrationConfirmed) {
+              addLog(`Migration confirmed by n8n`, 'success');
+            }
+          } else {
+            addLog(`Box migration webhook failed: ${webhookResult.error}`, 'warning');
+          }
+
+          newResults.boxFoldersToDelete.push({
+            mergedRecordId: candidate.merged.record.id,
+            mergedRecordName: candidate.merged.name,
+            survivorRecordId: candidate.survivor.record.id,
+            survivorRecordName: candidate.survivor.name,
+            keepBoxFolderId: boxMigration.keepBoxFolderId,
+            deleteBoxFolderId: boxMigration.deleteBoxFolderId,
+            webhookSent: webhookResult.success,
+            webhookResponse: webhookResult.result,
+            migrationConfirmed: webhookResult.result?.migrationConfirmed || false
+          });
+        }
+
+        // Build update payload
+        const updateFields = {};
+        Object.entries(fieldDecisions).forEach(([fieldName, decision]) => {
+          if (decision.include && !schema.computedFields.includes(fieldName) && !EXCLUDE_FROM_MERGE.includes(fieldName)) {
+            updateFields[fieldName] = decision.value;
+          }
+        });
+
+        // Build history entry with box migration info
+        const historyEntry = buildMergeHistoryEntry(candidate.survivor, candidate.merged, fieldDecisions, candidate, 'Bulk merge - auto-resolved', boxMigrationRecord);
+        const existingHistory = parseDedupeHistory(survivorFields['dedupe_history']);
+        existingHistory.push(historyEntry);
+        updateFields['dedupe_history'] = JSON.stringify(existingHistory, null, 2);
+
+        // Perform the merge
+        await client.updateRecord(credentials.tableName, candidate.survivor.record.id, updateFields);
+        await client.deleteRecord(credentials.tableName, candidate.merged.record.id);
+
+        newResults.success.push({
+          candidate,
+          historyEntry,
+          boxMigrationRecord
+        });
+
+        addLog(`Merged: ${candidate.merged.name} -> ${candidate.survivor.name}`, 'success');
+
+        // Small delay to avoid rate limiting
+        await new Promise(r => setTimeout(r, 250));
+
+      } catch (err) {
+        newResults.failed.push({
+          candidate,
+          error: err.message
+        });
+        addLog(`Failed: ${candidate.merged.name} - ${err.message}`, 'error');
+      }
+    }
+
+    setResults(newResults);
+    setProgress({ current: selectedCandidates.length, total: selectedCandidates.length, status: 'complete' });
+    setMerging(false);
+  };
+
+  const exportBoxFolders = () => {
+    const lines = ['Box Folder Migrations from Merged Records', '==========================================', ''];
+    lines.push('These Box folders need files migrated from the "delete" folder to the "keep" folder.');
+    lines.push('A webhook was sent to n8n to trigger the migration workflow.');
+    lines.push('');
+
+    results.boxFoldersToDelete.forEach(item => {
+      lines.push(`Merged Record: ${item.mergedRecordName} (${item.mergedRecordId})`);
+      lines.push(`Survivor Record: ${item.survivorRecordName} (${item.survivorRecordId})`);
+      lines.push(`  KEEP Box Folder ID: ${item.keepBoxFolderId}`);
+      lines.push(`  DELETE Box Folder ID: ${item.deleteBoxFolderId}`);
+      lines.push(`  Webhook Sent: ${item.webhookSent ? 'Yes' : 'No'}`);
+      lines.push('');
+    });
+
+    lines.push('==========================================');
+    lines.push(`Total: ${results.boxFoldersToDelete.length} Box folder migrations`);
+
+    const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `box-folder-migrations-${new Date().toISOString().slice(0, 10)}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const progressPercent = progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0;
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '800px' }}>
+        <div className="modal-header">
+          <div>
+            <h2>Bulk Merge</h2>
+            <div style={{ color: '#94a3b8', marginTop: '5px' }}>
+              {selectedCandidates.length} duplicate pairs selected
+            </div>
+          </div>
+          <button className="modal-close" onClick={onClose}>&times;</button>
+        </div>
+
+        <div className="modal-body">
+          {progress.status === 'pending' && (
+            <>
+              <div style={{ background: 'rgba(99, 102, 241, 0.1)', border: '1px solid rgba(99, 102, 241, 0.3)', borderRadius: '8px', padding: '20px', marginBottom: '20px' }}>
+                <h3 style={{ margin: '0 0 15px 0', color: '#a5b4fc' }}>Auto-Resolution Rules</h3>
+                <div style={{ fontSize: '0.9em', color: '#94a3b8', lineHeight: '1.6' }}>
+                  <p>The following conflicts will be automatically resolved:</p>
+                  <ul style={{ marginLeft: '20px', marginTop: '10px' }}>
+                    <li><strong>Phone Numbers:</strong> Same number in different formats will be unified</li>
+                    <li><strong>PPID/Clio ID:</strong> Survivor's ID will be kept</li>
+                    <li><strong>Box Folders:</strong> Webhook sent to n8n to migrate files, then survivor's folder kept</li>
+                    <li><strong>Middle Name/DOB:</strong> Survivor's value kept</li>
+                    <li><strong>smsFolder:</strong> Survivor's folder kept</li>
+                    <li><strong>Link Fields:</strong> Combined from both records</li>
+                    <li><strong>Other Fields:</strong> Non-empty values preferred, then survivor's value</li>
+                  </ul>
+                </div>
+              </div>
+
+              <div style={{ background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.3)', borderRadius: '8px', padding: '15px', marginBottom: '20px' }}>
+                <strong style={{ color: '#f59e0b' }}>Note:</strong>
+                <span style={{ color: '#94a3b8', marginLeft: '10px' }}>
+                  Box folders from merged records will be listed for manual cleanup in Box.
+                </span>
+              </div>
+
+              <div style={{ textAlign: 'center', padding: '20px' }}>
+                <button className="primary" onClick={handleBulkMerge} style={{ fontSize: '1.1em', padding: '15px 40px' }}>
+                  Start Bulk Merge ({selectedCandidates.length} pairs)
+                </button>
+              </div>
+            </>
+          )}
+
+          {progress.status === 'running' && (
+            <div style={{ textAlign: 'center', padding: '40px 20px' }}>
+              <div style={{ fontSize: '1.2em', marginBottom: '20px' }}>
+                Merging... {progress.current} of {progress.total}
+              </div>
+              <div className="progress-bar" style={{ height: '12px', borderRadius: '6px' }}>
+                <div className="fill" style={{ width: `${progressPercent}%` }}></div>
+              </div>
+              <div style={{ color: '#94a3b8', marginTop: '15px' }}>
+                Please wait, do not close this window...
+              </div>
+            </div>
+          )}
+
+          {progress.status === 'complete' && (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '15px', marginBottom: '20px' }}>
+                <div className="stat-card" style={{ background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
+                  <div className="number" style={{ color: '#10b981' }}>{results.success.length}</div>
+                  <div className="label">Successfully Merged</div>
+                </div>
+                <div className="stat-card" style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)' }}>
+                  <div className="number" style={{ color: '#ef4444' }}>{results.failed.length}</div>
+                  <div className="label">Failed</div>
+                </div>
+                <div className="stat-card" style={{ background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.3)' }}>
+                  <div className="number" style={{ color: '#f59e0b' }}>{results.boxFoldersToDelete.length}</div>
+                  <div className="label">Box Migrations</div>
+                </div>
+              </div>
+
+              {results.boxFoldersToDelete.length > 0 && (
+                <div style={{ background: '#0f172a', borderRadius: '8px', padding: '15px', marginBottom: '20px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                    <h3 style={{ margin: 0, color: '#f59e0b' }}>Box Folder Migrations (Webhook Sent to n8n)</h3>
+                    <button className="warning small" onClick={exportBoxFolders}>
+                      Export List
+                    </button>
+                  </div>
+                  <div style={{ maxHeight: '200px', overflow: 'auto' }}>
+                    {results.boxFoldersToDelete.map((item, idx) => (
+                      <div key={idx} style={{ padding: '10px', borderBottom: '1px solid #334155', fontSize: '0.85em' }}>
+                        <div style={{ color: '#e2e8f0', marginBottom: '5px' }}>
+                          <strong>{item.mergedRecordName}</strong> merged into {item.survivorRecordName}
+                        </div>
+                        <div style={{ color: '#94a3b8', marginLeft: '15px' }}>
+                          Keep: <code style={{ background: 'rgba(16, 185, 129, 0.2)', padding: '2px 6px', borderRadius: '4px', color: '#10b981' }}>{item.keepBoxFolderId}</code>
+                        </div>
+                        <div style={{ color: '#94a3b8', marginLeft: '15px' }}>
+                          Delete: <code style={{ background: 'rgba(239, 68, 68, 0.2)', padding: '2px 6px', borderRadius: '4px', color: '#ef4444' }}>{item.deleteBoxFolderId}</code>
+                        </div>
+                        <div style={{ marginLeft: '15px', marginTop: '5px' }}>
+                          {item.webhookSent ? (
+                            item.migrationConfirmed ? (
+                              <span style={{ color: '#10b981', fontSize: '0.8em' }}>Migration confirmed by n8n</span>
+                            ) : (
+                              <span style={{ color: '#f59e0b', fontSize: '0.8em' }}>Webhook sent - awaiting confirmation</span>
+                            )
+                          ) : (
+                            <span style={{ color: '#ef4444', fontSize: '0.8em' }}>Webhook failed</span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {results.failed.length > 0 && (
+                <div style={{ background: 'rgba(239, 68, 68, 0.1)', borderRadius: '8px', padding: '15px', marginBottom: '20px' }}>
+                  <h3 style={{ margin: '0 0 10px 0', color: '#ef4444' }}>Failed Merges</h3>
+                  {results.failed.map((item, idx) => (
+                    <div key={idx} style={{ padding: '8px', color: '#ef4444', fontSize: '0.85em' }}>
+                      {item.candidate.merged.name}: {item.error}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        <div className="modal-footer">
+          {progress.status === 'complete' ? (
+            <button className="primary" onClick={() => onComplete(results)}>
+              Done
+            </button>
+          ) : (
+            <button className="secondary" onClick={onClose} disabled={merging}>
+              Cancel
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================
 // MAIN APP
 // ============================================
 
@@ -1670,9 +2342,10 @@ function MainApp({ accessLevel, onLogout }) {
   const [bahrFilter, setBahrFilter] = useState('all');
   const [createdDateFrom, setCreatedDateFrom] = useState('');
   const [createdDateTo, setCreatedDateTo] = useState('');
-  const [selectedForBulkMerge, setSelectedForBulkMerge] = useState(new Set());
-  const [bulkMerging, setBulkMerging] = useState(false);
-  const [bulkMergeProgress, setBulkMergeProgress] = useState({ current: 0, total: 0 });
+  // Selection state for bulk operations
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [lastSelectedIndex, setLastSelectedIndex] = useState(null);
+  const [showBulkMergeModal, setShowBulkMergeModal] = useState(false);
 
   const logRef = useRef(null);
   const isBahrOnly = accessLevel === 'bahr';
@@ -1734,6 +2407,70 @@ function MainApp({ accessLevel, onLogout }) {
     setCandidates(prev => prev.filter(c => c.id !== selectedCandidate.id));
   };
 
+  // Handle row selection with shift-click support
+  const handleRowSelect = (candidate, index, event) => {
+    event.stopPropagation();
+
+    if (event.shiftKey && lastSelectedIndex !== null) {
+      // Shift-click: select range
+      const start = Math.min(lastSelectedIndex, index);
+      const end = Math.max(lastSelectedIndex, index);
+      const newSelected = new Set(selectedIds);
+
+      for (let i = start; i <= end; i++) {
+        newSelected.add(filteredCandidates[i].id);
+      }
+      setSelectedIds(newSelected);
+    } else if (event.ctrlKey || event.metaKey) {
+      // Ctrl/Cmd-click: toggle single
+      const newSelected = new Set(selectedIds);
+      if (newSelected.has(candidate.id)) {
+        newSelected.delete(candidate.id);
+      } else {
+        newSelected.add(candidate.id);
+      }
+      setSelectedIds(newSelected);
+      setLastSelectedIndex(index);
+    } else {
+      // Regular click: toggle single and set as last selected
+      const newSelected = new Set(selectedIds);
+      if (newSelected.has(candidate.id)) {
+        newSelected.delete(candidate.id);
+      } else {
+        newSelected.add(candidate.id);
+      }
+      setSelectedIds(newSelected);
+      setLastSelectedIndex(index);
+    }
+  };
+
+  // Select all visible candidates
+  const handleSelectAll = () => {
+    if (selectedIds.size === filteredCandidates.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredCandidates.map(c => c.id)));
+    }
+  };
+
+  // Get selected candidates for bulk merge
+  const selectedCandidates = useMemo(() =>
+    filteredCandidates.filter(c => selectedIds.has(c.id)),
+    [filteredCandidates, selectedIds]
+  );
+
+  // Handle bulk merge completion
+  const handleBulkMergeComplete = (results) => {
+    const mergedIds = results.success.map(r => r.candidate.id);
+    setCandidates(prev => prev.filter(c => !mergedIds.includes(c.id)));
+    setSelectedIds(new Set());
+    setShowBulkMergeModal(false);
+    addLog(`Bulk merge complete: ${results.success.length} merged, ${results.failed.length} failed`, 'success');
+    if (results.boxFoldersToDelete.length > 0) {
+      addLog(`${results.boxFoldersToDelete.length} box folders flagged for deletion`, 'warning');
+    }
+  };
+
   const filteredCandidates = useMemo(() => {
     let result = [...candidates];
     if (tierFilter !== 'all') result = result.filter(c => c.tier.tier === parseInt(tierFilter));
@@ -1777,229 +2514,6 @@ function MainApp({ accessLevel, onLogout }) {
     byTier: { 1: candidates.filter(c => c.tier.tier === 1).length, 2: candidates.filter(c => c.tier.tier === 2).length,
               3: candidates.filter(c => c.tier.tier === 3).length, 4: candidates.filter(c => c.tier.tier === 4).length }
   }), [allRecords, candidates]);
-
-  // Toggle selection for bulk merge
-  const toggleBulkSelect = (candidateId) => {
-    setSelectedForBulkMerge(prev => {
-      const next = new Set(prev);
-      if (next.has(candidateId)) next.delete(candidateId);
-      else next.add(candidateId);
-      return next;
-    });
-  };
-
-  // Select/deselect all filtered candidates
-  const toggleSelectAll = () => {
-    if (selectedForBulkMerge.size === filteredCandidates.length) {
-      setSelectedForBulkMerge(new Set());
-    } else {
-      setSelectedForBulkMerge(new Set(filteredCandidates.map(c => c.id)));
-    }
-  };
-
-  // Generate CSV of deleted records for download
-  const generateDeletedRecordsCSV = (deletedRecords) => {
-    if (deletedRecords.length === 0) return '';
-
-    // Get all unique field names from all records
-    const allFields = new Set();
-    deletedRecords.forEach(record => {
-      Object.keys(record.fields || {}).forEach(f => allFields.add(f));
-    });
-    allFields.add('record_id');
-    allFields.add('merge_id');
-    allFields.add('merged_into_record_id');
-    allFields.add('merged_into_name');
-    allFields.add('merge_timestamp');
-    allFields.add('confidence');
-
-    const fieldArray = Array.from(allFields).sort();
-
-    // CSV header
-    const header = fieldArray.map(f => `"${f.replace(/"/g, '""')}"`).join(',');
-
-    // CSV rows
-    const rows = deletedRecords.map(record => {
-      return fieldArray.map(field => {
-        let value = '';
-        if (field === 'record_id') value = record.recordId || '';
-        else if (field === 'merge_id') value = record.mergeId || '';
-        else if (field === 'merged_into_record_id') value = record.survivorId || '';
-        else if (field === 'merged_into_name') value = record.survivorName || '';
-        else if (field === 'merge_timestamp') value = record.timestamp || '';
-        else if (field === 'confidence') value = record.confidence || '';
-        else value = record.fields?.[field] ?? '';
-
-        // Handle arrays and objects
-        if (Array.isArray(value)) value = value.join('; ');
-        else if (typeof value === 'object' && value !== null) value = JSON.stringify(value);
-
-        // Escape CSV
-        return `"${String(value).replace(/"/g, '""')}"`;
-      }).join(',');
-    });
-
-    return [header, ...rows].join('\n');
-  };
-
-  // Download CSV file
-  const downloadCSV = (csvContent, filename) => {
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(link.href);
-  };
-
-  // Bulk merge selected candidates
-  const handleBulkMerge = async () => {
-    const selectedCandidates = filteredCandidates.filter(c => selectedForBulkMerge.has(c.id));
-    if (selectedCandidates.length === 0) {
-      addLog('No candidates selected for bulk merge', 'warning');
-      return;
-    }
-
-    // Check for any pending decisions needed
-    const hasTier4 = selectedCandidates.some(c => c.tier.tier === 4);
-    if (hasTier4) {
-      addLog('Cannot bulk merge Tier 4 (conflict) candidates. Please review them individually.', 'error');
-      return;
-    }
-
-    if (!window.confirm(`Are you sure you want to merge ${selectedCandidates.length} duplicate pairs?\n\nThis will:\n- Merge data from ${selectedCandidates.length} records into their survivors\n- Delete ${selectedCandidates.length} duplicate records\n- Download a CSV backup of all deleted records\n\nThis action is reversible through the History tab.`)) {
-      return;
-    }
-
-    setBulkMerging(true);
-    setBulkMergeProgress({ current: 0, total: selectedCandidates.length });
-    const deletedRecords = [];
-    const successfulMerges = [];
-
-    try {
-      const client = new AirtableClient(apiKey, baseId);
-      addLog(`Starting bulk merge of ${selectedCandidates.length} pairs...`, 'info');
-
-      for (let i = 0; i < selectedCandidates.length; i++) {
-        const candidate = selectedCandidates[i];
-        setBulkMergeProgress({ current: i + 1, total: selectedCandidates.length });
-
-        try {
-          const survivorFields = candidate.survivor.record.fields || {};
-          const mergedFields = candidate.merged.record.fields || {};
-
-          // Auto-resolve field decisions for bulk merge
-          const allFieldNames = new Set([...Object.keys(survivorFields), ...Object.keys(mergedFields)]);
-          const fieldDecisions = {};
-          const updateFields = {};
-
-          for (const fieldName of allFieldNames) {
-            const isComputed = schema.computedFields.includes(fieldName);
-            const isExcluded = EXCLUDE_FROM_MERGE.includes(fieldName);
-            const valA = survivorFields[fieldName];
-            const valB = mergedFields[fieldName];
-            const isEmpty = (v) => v === null || v === undefined || (typeof v === 'string' && !v.trim()) || (Array.isArray(v) && v.length === 0);
-
-            if (isComputed || isExcluded) {
-              fieldDecisions[fieldName] = { strategy: 'skip', value: null, include: false };
-            } else if (JSON.stringify(valA) === JSON.stringify(valB)) {
-              fieldDecisions[fieldName] = { strategy: 'auto', value: valA, include: !isEmpty(valA) };
-              if (!isEmpty(valA)) updateFields[fieldName] = valA;
-            } else if (isEmpty(valA) && !isEmpty(valB)) {
-              fieldDecisions[fieldName] = { strategy: 'keep_b', value: valB, include: true };
-              updateFields[fieldName] = valB;
-            } else if (!isEmpty(valA) && isEmpty(valB)) {
-              fieldDecisions[fieldName] = { strategy: 'keep_a', value: valA, include: true };
-              updateFields[fieldName] = valA;
-            } else if (schema.linkFields.includes(fieldName)) {
-              // Merge link fields
-              const merged = [...new Set([...(valA || []), ...(valB || [])])];
-              fieldDecisions[fieldName] = { strategy: 'merge', value: merged, include: merged.length > 0 };
-              if (merged.length > 0) updateFields[fieldName] = merged;
-            } else {
-              // For conflicts in bulk mode, keep survivor value (Record A)
-              fieldDecisions[fieldName] = { strategy: 'keep_a', value: valA, include: true };
-              updateFields[fieldName] = valA;
-            }
-          }
-
-          // Build history entry with COMPLETE data
-          const historyEntry = {
-            merge_id: generateMergeId(),
-            timestamp: new Date().toISOString(),
-            action: 'merge',
-            confidence: candidate.confidence,
-            match_reasons: candidate.reasons,
-            survivor_record_id: candidate.survivor.record.id,
-            merged_records: [{
-              original_record_id: candidate.merged.record.id,
-              field_snapshot: { ...mergedFields }, // Complete snapshot of ALL fields
-            }],
-            field_decisions: fieldDecisions,
-            performed_by: 'bulk_merge',
-            notes: `Bulk merge operation - ${selectedCandidates.length} pairs processed`,
-            bulk_merge_batch_id: `bulk_${Date.now()}`
-          };
-
-          // Get existing history and append
-          const existingHistory = parseDedupeHistory(survivorFields['dedupe_history']);
-          existingHistory.push(historyEntry);
-          updateFields['dedupe_history'] = JSON.stringify(existingHistory, null, 2);
-
-          // Update survivor record
-          await client.updateRecord(CLIENT_INFO_TABLE, candidate.survivor.record.id, updateFields);
-
-          // Store deleted record info for CSV (with COMPLETE field data)
-          deletedRecords.push({
-            recordId: candidate.merged.record.id,
-            mergeId: historyEntry.merge_id,
-            survivorId: candidate.survivor.record.id,
-            survivorName: candidate.survivor.name,
-            timestamp: historyEntry.timestamp,
-            confidence: candidate.confidence,
-            fields: { ...mergedFields } // Complete field data
-          });
-
-          // Delete merged record
-          await client.deleteRecord(CLIENT_INFO_TABLE, candidate.merged.record.id);
-
-          successfulMerges.push(candidate.id);
-          addLog(`[${i + 1}/${selectedCandidates.length}] Merged: ${candidate.merged.name} -> ${candidate.survivor.name}`, 'success');
-
-          // Rate limiting
-          if (i < selectedCandidates.length - 1) {
-            await new Promise(r => setTimeout(r, 250));
-          }
-        } catch (err) {
-          addLog(`[${i + 1}/${selectedCandidates.length}] Failed: ${candidate.merged.name} - ${err.message}`, 'error');
-        }
-      }
-
-      // FORCE download CSV of deleted records
-      if (deletedRecords.length > 0) {
-        const csvContent = generateDeletedRecordsCSV(deletedRecords);
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-        const filename = `deleted_records_bulk_merge_${timestamp}.csv`;
-        downloadCSV(csvContent, filename);
-        addLog(`Downloaded CSV backup: ${filename} (${deletedRecords.length} records)`, 'success');
-      }
-
-      // Remove successful merges from candidates
-      setCandidates(prev => prev.filter(c => !successfulMerges.includes(c.id)));
-      setSelectedForBulkMerge(new Set());
-
-      addLog(`Bulk merge complete: ${successfulMerges.length}/${selectedCandidates.length} successful`,
-             successfulMerges.length === selectedCandidates.length ? 'success' : 'warning');
-
-    } catch (err) {
-      addLog(`Bulk merge error: ${err.message}`, 'error');
-    } finally {
-      setBulkMerging(false);
-      setBulkMergeProgress({ current: 0, total: 0 });
-    }
-  };
 
   return (
     <div className="container">
@@ -2058,7 +2572,29 @@ function MainApp({ accessLevel, onLogout }) {
 
           {candidates.length > 0 && (
             <div className="card">
-              <h2>Duplicate Candidates ({filteredCandidates.length})</h2>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                <h2 style={{ margin: 0 }}>Duplicate Candidates ({filteredCandidates.length})</h2>
+                {selectedIds.size > 0 && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                    <span style={{ color: '#a5b4fc' }}>
+                      {selectedIds.size} selected
+                    </span>
+                    <button
+                      className="success"
+                      onClick={() => setShowBulkMergeModal(true)}
+                      disabled={!schema}
+                    >
+                      Bulk Merge Selected
+                    </button>
+                    <button
+                      className="secondary small"
+                      onClick={() => setSelectedIds(new Set())}
+                    >
+                      Clear Selection
+                    </button>
+                  </div>
+                )}
+              </div>
 
               {/* Filter Controls */}
               <div className="filter-controls" style={{ marginBottom: '10px' }}>
@@ -2107,75 +2643,9 @@ function MainApp({ accessLevel, onLogout }) {
                 )}
               </div>
 
-              {/* Bulk Merge Controls */}
-              <div style={{
-                background: 'rgba(99, 102, 241, 0.1)',
-                border: '1px solid rgba(99, 102, 241, 0.3)',
-                borderRadius: '8px',
-                padding: '15px',
-                marginBottom: '15px',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                flexWrap: 'wrap',
-                gap: '10px'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                  <label className="checkbox-label">
-                    <input
-                      type="checkbox"
-                      checked={selectedForBulkMerge.size === filteredCandidates.length && filteredCandidates.length > 0}
-                      onChange={toggleSelectAll}
-                      disabled={bulkMerging}
-                    />
-                    Select All ({filteredCandidates.length})
-                  </label>
-                  <span style={{ color: '#a5b4fc', fontWeight: '500' }}>
-                    {selectedForBulkMerge.size} selected
-                  </span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  {bulkMerging && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <div className="progress-bar" style={{ width: '150px' }}>
-                        <div
-                          className="fill"
-                          style={{ width: `${(bulkMergeProgress.current / bulkMergeProgress.total) * 100}%` }}
-                        />
-                      </div>
-                      <span style={{ color: '#94a3b8', fontSize: '0.85em' }}>
-                        {bulkMergeProgress.current}/{bulkMergeProgress.total}
-                      </span>
-                    </div>
-                  )}
-                  <button
-                    className="danger"
-                    onClick={handleBulkMerge}
-                    disabled={bulkMerging || selectedForBulkMerge.size === 0}
-                  >
-                    {bulkMerging ? 'Merging...' : `Bulk Merge (${selectedForBulkMerge.size})`}
-                  </button>
-                </div>
+              <div style={{ fontSize: '0.85em', color: '#94a3b8', marginBottom: '10px' }}>
+                Tip: Click checkbox to select, Shift+click to select range, Ctrl/Cmd+click to toggle
               </div>
-
-              {selectedForBulkMerge.size > 0 && !bulkMerging && (
-                <div style={{
-                  background: 'rgba(245, 158, 11, 0.1)',
-                  border: '1px solid rgba(245, 158, 11, 0.3)',
-                  borderRadius: '8px',
-                  padding: '12px 15px',
-                  marginBottom: '15px',
-                  fontSize: '0.9em',
-                  color: '#f59e0b'
-                }}>
-                  <strong>Bulk Merge will:</strong>
-                  <ul style={{ margin: '8px 0 0 20px', lineHeight: '1.6' }}>
-                    <li>Merge {selectedForBulkMerge.size} duplicate records into their survivors</li>
-                    <li>Auto-download a CSV backup of all deleted records</li>
-                    <li>Store complete history in dedupe_history for undo capability</li>
-                  </ul>
-                </div>
-              )}
               <div className="table-container">
                 <table>
                   <thead>
@@ -2183,9 +2653,9 @@ function MainApp({ accessLevel, onLogout }) {
                       <th style={{ width: '40px' }}>
                         <input
                           type="checkbox"
-                          checked={selectedForBulkMerge.size === filteredCandidates.length && filteredCandidates.length > 0}
-                          onChange={toggleSelectAll}
-                          disabled={bulkMerging}
+                          checked={filteredCandidates.length > 0 && selectedIds.size === filteredCandidates.length}
+                          onChange={handleSelectAll}
+                          style={{ width: '18px', height: '18px', cursor: 'pointer' }}
                           title="Select all"
                         />
                       </th>
@@ -2199,20 +2669,28 @@ function MainApp({ accessLevel, onLogout }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredCandidates.map(c => {
+                    {filteredCandidates.map((c, idx) => {
                       const survivorCreated = c.survivor.record.fields['Created'] || c.survivor.record.fields['createdTime'];
                       const mergedCreated = c.merged.record.fields['Created'] || c.merged.record.fields['createdTime'];
                       const displayDate = survivorCreated || mergedCreated;
                       const isTier4 = c.tier.tier === 4;
 
                       return (
-                        <tr key={c.id} className="clickable" style={selectedForBulkMerge.has(c.id) ? { background: 'rgba(99, 102, 241, 0.15)' } : {}}>
+                        <tr
+                          key={c.id}
+                          className="clickable"
+                          style={{
+                            background: selectedIds.has(c.id) ? 'rgba(99, 102, 241, 0.2)' : undefined
+                          }}
+                        >
                           <td onClick={e => e.stopPropagation()}>
                             <input
                               type="checkbox"
-                              checked={selectedForBulkMerge.has(c.id)}
-                              onChange={() => toggleBulkSelect(c.id)}
-                              disabled={bulkMerging || isTier4}
+                              checked={selectedIds.has(c.id)}
+                              onChange={(e) => handleRowSelect(c, idx, e)}
+                              onClick={(e) => handleRowSelect(c, idx, e)}
+                              disabled={isTier4}
+                              style={{ width: '18px', height: '18px', cursor: 'pointer' }}
                               title={isTier4 ? "Tier 4 conflicts must be reviewed individually" : "Select for bulk merge"}
                             />
                           </td>
@@ -2222,9 +2700,9 @@ function MainApp({ accessLevel, onLogout }) {
                           </td>
                           <td onClick={() => setSelectedCandidate(c)}>
                             {(c.survivor.record.fields['Bahr Client'] || c.merged.record.fields['Bahr Client']) ? (
-                              <span style={{ background: '#6366f1', color: 'white', padding: '2px 8px', borderRadius: '4px', fontSize: '0.8em' }}>T</span>
+                              <span style={{ background: '#6366f1', color: 'white', padding: '2px 8px', borderRadius: '4px', fontSize: '0.8em' }}>Yes</span>
                             ) : (
-                              <span style={{ color: '#64748b', fontSize: '0.8em' }}>-</span>
+                              <span style={{ color: '#64748b', fontSize: '0.8em' }}>No</span>
                             )}
                           </td>
                           <td onClick={() => setSelectedCandidate(c)}>
@@ -2292,6 +2770,17 @@ function MainApp({ accessLevel, onLogout }) {
           onComplete={handleMergeComplete}
           onSkip={() => { setCandidates(prev => prev.filter(c => c.id !== selectedCandidate.id)); setSelectedCandidate(null); }}
           onClose={() => setSelectedCandidate(null)}
+          addLog={addLog}
+        />
+      )}
+
+      {showBulkMergeModal && selectedCandidates.length > 0 && (
+        <BulkMergeModal
+          selectedCandidates={selectedCandidates}
+          schema={schema}
+          credentials={credentials}
+          onComplete={handleBulkMergeComplete}
+          onClose={() => setShowBulkMergeModal(false)}
           addLog={addLog}
         />
       )}
