@@ -743,6 +743,9 @@ const getRecordCompleteness = (fields) => {
   return score;
 };
 
+// Default webhook URL for Box folder migration
+const DEFAULT_BOX_MIGRATION_WEBHOOK = 'https://n8n.intelechia.com/webhook-test/box-dedup';
+
 // Get all box folder-related fields that would be deleted
 const getBoxFolderDeletions = (fieldDecisions, mergedFields) => {
   const boxFolderFields = ['Box_Folder_ID', 'URL to box folder (not shared)', 'box folder name', 'box share 2.0', 'box_shared_link'];
@@ -759,6 +762,67 @@ const getBoxFolderDeletions = (fieldDecisions, mergedFields) => {
   });
 
   return Object.keys(deletions).length > 0 ? deletions : null;
+};
+
+// Check if Box folders need migration (both records have different Box folder IDs)
+const getBoxMigrationInfo = (survivorFields, mergedFields) => {
+  const survivorBoxId = survivorFields['Box_Folder_ID'];
+  const mergedBoxId = mergedFields['Box_Folder_ID'];
+
+  // If both have Box folder IDs and they're different, migration is needed
+  if (survivorBoxId && mergedBoxId && survivorBoxId !== mergedBoxId) {
+    return {
+      needsMigration: true,
+      keepBoxFolderId: survivorBoxId,
+      deleteBoxFolderId: mergedBoxId,
+      keepBoxUrl: survivorFields['URL to box folder (not shared)'] || survivorFields['box_shared_link'] || '',
+      deleteBoxUrl: mergedFields['URL to box folder (not shared)'] || mergedFields['box_shared_link'] || '',
+      keepBoxName: survivorFields['box folder name'] || '',
+      deleteBoxName: mergedFields['box folder name'] || ''
+    };
+  }
+
+  // If only merged has box folder, we should migrate it to survivor
+  if (!survivorBoxId && mergedBoxId) {
+    return {
+      needsMigration: false, // No migration needed, we'll just keep merged's folder
+      adoptFolder: true,
+      adoptBoxFolderId: mergedBoxId,
+      adoptBoxUrl: mergedFields['URL to box folder (not shared)'] || mergedFields['box_shared_link'] || '',
+      adoptBoxName: mergedFields['box folder name'] || ''
+    };
+  }
+
+  return { needsMigration: false };
+};
+
+// Send webhook to n8n for Box folder migration
+const sendBoxMigrationWebhook = async (webhookUrl, migrationData) => {
+  const url = webhookUrl || DEFAULT_BOX_MIGRATION_WEBHOOK;
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        action: 'box_folder_migration',
+        timestamp: new Date().toISOString(),
+        ...migrationData
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`Webhook failed: ${response.status}`);
+    }
+
+    const result = await response.json().catch(() => ({}));
+    return { success: true, result };
+  } catch (error) {
+    console.error('Box migration webhook error:', error);
+    return { success: false, error: error.message };
+  }
 };
 
 // ============================================
@@ -1147,6 +1211,31 @@ function MergeReviewModal({ candidate, schema, credentials, onComplete, onSkip, 
     setMerging(true);
     try {
       const client = new AirtableClient(credentials.apiKey, credentials.baseId);
+
+      // Check if Box folder migration is needed and send webhook
+      const boxMigration = getBoxMigrationInfo(survivorFields, mergedFields);
+      if (boxMigration.needsMigration) {
+        addLog(`Box migration needed: ${boxMigration.deleteBoxFolderId} -> ${boxMigration.keepBoxFolderId}`, 'info');
+
+        const webhookResult = await sendBoxMigrationWebhook(null, {
+          survivorRecordId: candidate.survivor.record.id,
+          survivorRecordName: candidate.survivor.name,
+          mergedRecordId: candidate.merged.record.id,
+          mergedRecordName: candidate.merged.name,
+          keepBoxFolderId: boxMigration.keepBoxFolderId,
+          deleteBoxFolderId: boxMigration.deleteBoxFolderId,
+          keepBoxUrl: boxMigration.keepBoxUrl,
+          deleteBoxUrl: boxMigration.deleteBoxUrl,
+          keepBoxName: boxMigration.keepBoxName,
+          deleteBoxName: boxMigration.deleteBoxName
+        });
+
+        if (webhookResult.success) {
+          addLog(`Box migration webhook sent successfully`, 'success');
+        } else {
+          addLog(`Box migration webhook failed: ${webhookResult.error}`, 'warning');
+        }
+      }
 
       // Build update payload
       const updateFields = {};
@@ -1895,15 +1984,38 @@ function BulkMergeModal({ selectedCandidates, schema, credentials, onComplete, o
           }
         });
 
-        // Track box folders to delete
-        const boxDeletions = getBoxFolderDeletions(fieldDecisions, mergedFields);
-        if (boxDeletions) {
+        // Check if Box folder migration is needed and send webhook
+        const boxMigration = getBoxMigrationInfo(survivorFields, mergedFields);
+        if (boxMigration.needsMigration) {
+          addLog(`Box migration needed: ${boxMigration.deleteBoxFolderId} -> ${boxMigration.keepBoxFolderId}`, 'info');
+
+          const webhookResult = await sendBoxMigrationWebhook(null, {
+            survivorRecordId: candidate.survivor.record.id,
+            survivorRecordName: candidate.survivor.name,
+            mergedRecordId: candidate.merged.record.id,
+            mergedRecordName: candidate.merged.name,
+            keepBoxFolderId: boxMigration.keepBoxFolderId,
+            deleteBoxFolderId: boxMigration.deleteBoxFolderId,
+            keepBoxUrl: boxMigration.keepBoxUrl,
+            deleteBoxUrl: boxMigration.deleteBoxUrl,
+            keepBoxName: boxMigration.keepBoxName,
+            deleteBoxName: boxMigration.deleteBoxName
+          });
+
+          if (webhookResult.success) {
+            addLog(`Box migration webhook sent successfully`, 'success');
+          } else {
+            addLog(`Box migration webhook failed: ${webhookResult.error}`, 'warning');
+          }
+
           newResults.boxFoldersToDelete.push({
             mergedRecordId: candidate.merged.record.id,
             mergedRecordName: candidate.merged.name,
             survivorRecordId: candidate.survivor.record.id,
             survivorRecordName: candidate.survivor.name,
-            folders: boxDeletions
+            keepBoxFolderId: boxMigration.keepBoxFolderId,
+            deleteBoxFolderId: boxMigration.deleteBoxFolderId,
+            webhookSent: webhookResult.success
           });
         }
 
@@ -1951,25 +2063,28 @@ function BulkMergeModal({ selectedCandidates, schema, credentials, onComplete, o
   };
 
   const exportBoxFolders = () => {
-    const lines = ['Box Folders to Delete from Merged Records', '==========================================', ''];
+    const lines = ['Box Folder Migrations from Merged Records', '==========================================', ''];
+    lines.push('These Box folders need files migrated from the "delete" folder to the "keep" folder.');
+    lines.push('A webhook was sent to n8n to trigger the migration workflow.');
+    lines.push('');
 
     results.boxFoldersToDelete.forEach(item => {
       lines.push(`Merged Record: ${item.mergedRecordName} (${item.mergedRecordId})`);
-      lines.push(`Into Survivor: ${item.survivorRecordName} (${item.survivorRecordId})`);
-      Object.entries(item.folders).forEach(([field, value]) => {
-        lines.push(`  ${field}: ${value}`);
-      });
+      lines.push(`Survivor Record: ${item.survivorRecordName} (${item.survivorRecordId})`);
+      lines.push(`  KEEP Box Folder ID: ${item.keepBoxFolderId}`);
+      lines.push(`  DELETE Box Folder ID: ${item.deleteBoxFolderId}`);
+      lines.push(`  Webhook Sent: ${item.webhookSent ? 'Yes' : 'No'}`);
       lines.push('');
     });
 
     lines.push('==========================================');
-    lines.push(`Total: ${results.boxFoldersToDelete.length} records with box folders to clean up`);
+    lines.push(`Total: ${results.boxFoldersToDelete.length} Box folder migrations`);
 
     const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `box-folders-to-delete-${new Date().toISOString().slice(0, 10)}.txt`;
+    a.download = `box-folder-migrations-${new Date().toISOString().slice(0, 10)}.txt`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -1999,7 +2114,7 @@ function BulkMergeModal({ selectedCandidates, schema, credentials, onComplete, o
                   <ul style={{ marginLeft: '20px', marginTop: '10px' }}>
                     <li><strong>Phone Numbers:</strong> Same number in different formats will be unified</li>
                     <li><strong>PPID/Clio ID:</strong> Survivor's ID will be kept</li>
-                    <li><strong>Box Folders:</strong> Survivor's folder kept, merged folder tracked for deletion</li>
+                    <li><strong>Box Folders:</strong> Webhook sent to n8n to migrate files, then survivor's folder kept</li>
                     <li><strong>Middle Name/DOB:</strong> Survivor's value kept</li>
                     <li><strong>smsFolder:</strong> Survivor's folder kept</li>
                     <li><strong>Link Fields:</strong> Combined from both records</li>
@@ -2050,14 +2165,14 @@ function BulkMergeModal({ selectedCandidates, schema, credentials, onComplete, o
                 </div>
                 <div className="stat-card" style={{ background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.3)' }}>
                   <div className="number" style={{ color: '#f59e0b' }}>{results.boxFoldersToDelete.length}</div>
-                  <div className="label">Box Folders to Delete</div>
+                  <div className="label">Box Migrations</div>
                 </div>
               </div>
 
               {results.boxFoldersToDelete.length > 0 && (
                 <div style={{ background: '#0f172a', borderRadius: '8px', padding: '15px', marginBottom: '20px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-                    <h3 style={{ margin: 0, color: '#f59e0b' }}>Box Folders to Delete</h3>
+                    <h3 style={{ margin: 0, color: '#f59e0b' }}>Box Folder Migrations (Webhook Sent to n8n)</h3>
                     <button className="warning small" onClick={exportBoxFolders}>
                       Export List
                     </button>
@@ -2068,11 +2183,19 @@ function BulkMergeModal({ selectedCandidates, schema, credentials, onComplete, o
                         <div style={{ color: '#e2e8f0', marginBottom: '5px' }}>
                           <strong>{item.mergedRecordName}</strong> merged into {item.survivorRecordName}
                         </div>
-                        {Object.entries(item.folders).map(([field, value]) => (
-                          <div key={field} style={{ color: '#94a3b8', marginLeft: '15px' }}>
-                            {field}: <code style={{ background: '#1e293b', padding: '2px 6px', borderRadius: '4px' }}>{value}</code>
-                          </div>
-                        ))}
+                        <div style={{ color: '#94a3b8', marginLeft: '15px' }}>
+                          Keep: <code style={{ background: 'rgba(16, 185, 129, 0.2)', padding: '2px 6px', borderRadius: '4px', color: '#10b981' }}>{item.keepBoxFolderId}</code>
+                        </div>
+                        <div style={{ color: '#94a3b8', marginLeft: '15px' }}>
+                          Delete: <code style={{ background: 'rgba(239, 68, 68, 0.2)', padding: '2px 6px', borderRadius: '4px', color: '#ef4444' }}>{item.deleteBoxFolderId}</code>
+                        </div>
+                        <div style={{ marginLeft: '15px', marginTop: '5px' }}>
+                          {item.webhookSent ? (
+                            <span style={{ color: '#10b981', fontSize: '0.8em' }}>Webhook sent</span>
+                          ) : (
+                            <span style={{ color: '#ef4444', fontSize: '0.8em' }}>Webhook failed</span>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>
