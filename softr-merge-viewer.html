@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Merge Info Viewer</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    .merge-viewer {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 14px;
+      color: #1e293b;
+      line-height: 1.5;
+    }
+
+    .merge-card {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 16px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    .merge-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    .merge-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: #1e293b;
+    }
+
+    .merge-badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .badge-merge {
+      background: #dbeafe;
+      color: #1d4ed8;
+    }
+
+    .badge-success {
+      background: #dcfce7;
+      color: #15803d;
+    }
+
+    .badge-confidence {
+      background: #fef3c7;
+      color: #b45309;
+    }
+
+    .merge-meta {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .meta-item {
+      background: #f8fafc;
+      padding: 10px 14px;
+      border-radius: 8px;
+    }
+
+    .meta-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #64748b;
+      margin-bottom: 4px;
+    }
+
+    .meta-value {
+      font-size: 13px;
+      color: #1e293b;
+      word-break: break-all;
+    }
+
+    .meta-value a {
+      color: #2563eb;
+      text-decoration: none;
+    }
+
+    .meta-value a:hover {
+      text-decoration: underline;
+    }
+
+    .section-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #475569;
+      margin: 16px 0 12px 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .section-title::before {
+      content: '';
+      width: 4px;
+      height: 16px;
+      background: #6366f1;
+      border-radius: 2px;
+    }
+
+    .field-decisions {
+      background: #f8fafc;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .field-row {
+      display: grid;
+      grid-template-columns: 140px 1fr 100px;
+      padding: 10px 14px;
+      border-bottom: 1px solid #e2e8f0;
+      align-items: center;
+    }
+
+    .field-row:last-child {
+      border-bottom: none;
+    }
+
+    .field-row:hover {
+      background: #f1f5f9;
+    }
+
+    .field-name {
+      font-weight: 500;
+      color: #475569;
+      font-size: 13px;
+    }
+
+    .field-value {
+      color: #1e293b;
+      font-size: 13px;
+    }
+
+    .field-strategy {
+      text-align: right;
+    }
+
+    .strategy-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 500;
+    }
+
+    .strategy-keep_a {
+      background: #dcfce7;
+      color: #15803d;
+    }
+
+    .strategy-keep_b {
+      background: #dbeafe;
+      color: #1d4ed8;
+    }
+
+    .strategy-auto {
+      background: #f3e8ff;
+      color: #7c3aed;
+    }
+
+    .strategy-merge {
+      background: #fef3c7;
+      color: #b45309;
+    }
+
+    .strategy-skip {
+      background: #f1f5f9;
+      color: #64748b;
+    }
+
+    .box-info {
+      background: linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%);
+      border: 1px solid #bfdbfe;
+      border-radius: 8px;
+      padding: 16px;
+      margin-top: 16px;
+    }
+
+    .box-info-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #1d4ed8;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .box-info-title svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    .box-links {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .box-link-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .box-link-label {
+      font-size: 12px;
+      color: #64748b;
+      min-width: 100px;
+    }
+
+    .box-link-value a {
+      color: #2563eb;
+      text-decoration: none;
+      font-size: 13px;
+    }
+
+    .box-link-value a:hover {
+      text-decoration: underline;
+    }
+
+    .simple-merge-info {
+      background: linear-gradient(135deg, #f0fdf4 0%, #eff6ff 100%);
+      border: 1px solid #86efac;
+      border-radius: 8px;
+      padding: 16px;
+    }
+
+    .simple-merge-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .simple-merge-icon {
+      width: 32px;
+      height: 32px;
+      background: #dcfce7;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .simple-merge-icon svg {
+      width: 18px;
+      height: 18px;
+      color: #15803d;
+    }
+
+    .simple-merge-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: #15803d;
+    }
+
+    .simple-merge-timestamp {
+      font-size: 12px;
+      color: #64748b;
+      margin-bottom: 12px;
+    }
+
+    .error-state {
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      border-radius: 8px;
+      padding: 16px;
+      color: #b91c1c;
+      font-size: 13px;
+    }
+
+    .no-data {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 20px;
+      text-align: center;
+      color: #64748b;
+      font-size: 13px;
+    }
+
+    .reason-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 8px;
+    }
+
+    .reason-tag {
+      display: inline-block;
+      background: #e0e7ff;
+      color: #4338ca;
+      padding: 3px 10px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 500;
+    }
+
+    .collapsible-header {
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .collapsible-header:hover {
+      opacity: 0.8;
+    }
+
+    .chevron {
+      transition: transform 0.2s;
+    }
+
+    .chevron.expanded {
+      transform: rotate(180deg);
+    }
+
+    .collapsible-content {
+      overflow: hidden;
+      transition: max-height 0.3s ease-out;
+    }
+
+    .collapsible-content.collapsed {
+      max-height: 0;
+    }
+  </style>
+</head>
+<body>
+  <div id="merge-viewer-root" class="merge-viewer"></div>
+
+  <script>
+    (function() {
+      'use strict';
+
+      // Configuration - customize these selectors to match your Softr setup
+      const CONFIG = {
+        // Selectors to look for merge data
+        selectors: [
+          '.item-text-field',
+          '[class*="item-text-field"]',
+          '[data-field-type="text"]',
+          '.field-value',
+          '.record-field'
+        ],
+        // Target container for rendered output
+        targetId: 'merge-viewer-root',
+        // Auto-detect mode: 'replace' replaces the original element, 'append' adds below
+        mode: 'replace',
+        // Poll interval for dynamic content (ms), set to 0 to disable
+        pollInterval: 1000,
+        // Max polls before giving up
+        maxPolls: 30
+      };
+
+      // Icons
+      const ICONS = {
+        box: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>`,
+        check: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>`,
+        merge: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/></svg>`,
+        chevron: `<svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><polyline points="6 9 12 15 18 9"/></svg>`
+      };
+
+      // Parse merge data from text
+      function parseMergeData(text) {
+        if (!text || typeof text !== 'string') return null;
+
+        const trimmed = text.trim();
+
+        // Try to parse as JSON (complex merge info)
+        if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
+          try {
+            const parsed = JSON.parse(trimmed);
+            return { type: 'json', data: Array.isArray(parsed) ? parsed : [parsed] };
+          } catch (e) {
+            // Not valid JSON, continue
+          }
+        }
+
+        // Try to parse simple dedup message format
+        const simpleMatch = trimmed.match(/Deduped (\d+) folder\(s\) at ([\d\-T:.Z]+)\s+Target:\s*(https?:\/\/[^\s]+)\s+Merged from:\s*(https?:\/\/[^\s]+)/i);
+        if (simpleMatch) {
+          return {
+            type: 'simple',
+            data: {
+              folderCount: parseInt(simpleMatch[1]),
+              timestamp: simpleMatch[2],
+              targetUrl: simpleMatch[3],
+              mergedFromUrl: simpleMatch[4],
+              hasAuditFolder: trimmed.includes('DEDUP folders moved inside target for audit')
+            }
+          };
+        }
+
+        // Check if it looks like merge data but couldn't be parsed
+        if (trimmed.includes('merge_id') || trimmed.includes('Deduped') || trimmed.includes('survivor_record_id')) {
+          return { type: 'unparsed', data: trimmed };
+        }
+
+        return null;
+      }
+
+      // Format timestamp
+      function formatTimestamp(ts) {
+        try {
+          const date = new Date(ts);
+          return date.toLocaleString('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+          });
+        } catch (e) {
+          return ts;
+        }
+      }
+
+      // Extract Box folder ID from URL
+      function extractBoxFolderId(url) {
+        if (!url) return null;
+        const match = url.match(/folder\/(\d+)/);
+        return match ? match[1] : null;
+      }
+
+      // Render simple merge info
+      function renderSimpleMerge(data) {
+        const targetId = extractBoxFolderId(data.targetUrl);
+        const mergedId = extractBoxFolderId(data.mergedFromUrl);
+
+        return `
+          <div class="simple-merge-info">
+            <div class="simple-merge-header">
+              <div class="simple-merge-icon">${ICONS.check}</div>
+              <div class="simple-merge-title">Deduped ${data.folderCount} folder${data.folderCount > 1 ? 's' : ''}</div>
+            </div>
+            <div class="simple-merge-timestamp">${formatTimestamp(data.timestamp)}</div>
+            <div class="box-links">
+              <div class="box-link-item">
+                <span class="box-link-label">Target folder:</span>
+                <span class="box-link-value">
+                  <a href="${data.targetUrl}" target="_blank" rel="noopener">
+                    ${targetId || 'Open folder'}
+                  </a>
+                </span>
+              </div>
+              <div class="box-link-item">
+                <span class="box-link-label">Merged from:</span>
+                <span class="box-link-value">
+                  <a href="${data.mergedFromUrl}" target="_blank" rel="noopener">
+                    ${mergedId || 'Open folder'}
+                  </a>
+                </span>
+              </div>
+              ${data.hasAuditFolder ? `
+                <div class="meta-item" style="margin-top: 8px; background: #fef3c7;">
+                  <div class="meta-value" style="color: #b45309; font-size: 12px;">
+                    Original content moved to DEDUP audit folder
+                  </div>
+                </div>
+              ` : ''}
+            </div>
+          </div>
+        `;
+      }
+
+      // Render field decisions table
+      function renderFieldDecisions(decisions) {
+        if (!decisions || Object.keys(decisions).length === 0) return '';
+
+        const rows = Object.entries(decisions).map(([field, decision]) => {
+          const value = decision.value !== null && decision.value !== undefined
+            ? String(decision.value)
+            : '<em style="color: #94a3b8">empty</em>';
+          const strategy = decision.strategy || 'unknown';
+
+          return `
+            <div class="field-row">
+              <div class="field-name">${field}</div>
+              <div class="field-value">${value}</div>
+              <div class="field-strategy">
+                <span class="strategy-badge strategy-${strategy}">${strategy}</span>
+              </div>
+            </div>
+          `;
+        }).join('');
+
+        return `
+          <div class="section-title">Field Decisions</div>
+          <div class="field-decisions">${rows}</div>
+        `;
+      }
+
+      // Render Box info section
+      function renderBoxInfo(mergeData) {
+        const boxLink = mergeData.box_shared_link;
+        const boxFolderId = mergeData.Box_Folder_ID;
+        const smsFolder = mergeData.smsFolder;
+
+        const decisions = mergeData.field_decisions || {};
+        const survivorBoxLink = decisions.box_shared_link?.value;
+        const deletedBoxLink = decisions.deleteFromMerged;
+
+        if (!boxLink && !boxFolderId && !survivorBoxLink) return '';
+
+        const links = [];
+
+        if (survivorBoxLink) {
+          links.push({ label: 'Survivor folder', url: survivorBoxLink });
+        } else if (boxLink) {
+          links.push({ label: 'Box folder', url: boxLink });
+        }
+
+        if (boxFolderId) {
+          links.push({ label: 'Folder ID', value: boxFolderId });
+        }
+
+        if (smsFolder) {
+          links.push({ label: 'SMS Folder', value: smsFolder });
+        }
+
+        return `
+          <div class="box-info">
+            <div class="box-info-title">
+              ${ICONS.box}
+              Box Integration
+            </div>
+            <div class="box-links">
+              ${links.map(link => `
+                <div class="box-link-item">
+                  <span class="box-link-label">${link.label}:</span>
+                  <span class="box-link-value">
+                    ${link.url
+                      ? `<a href="${link.url}" target="_blank" rel="noopener">${extractBoxFolderId(link.url) || 'Open'}</a>`
+                      : link.value
+                    }
+                  </span>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `;
+      }
+
+      // Render single merge entry
+      function renderMergeEntry(entry, index) {
+        const timestamp = formatTimestamp(entry.timestamp);
+        const confidence = entry.confidence;
+        const action = entry.action || 'merge';
+        const mergeId = entry.merge_id;
+        const survivorId = entry.survivor_record_id;
+        const matchReasons = entry.match_reasons || [];
+
+        const mergedRecords = entry.merged_records || [];
+        const firstMerged = mergedRecords[0] || {};
+        const fieldSnapshot = firstMerged.field_snapshot || {};
+        const fieldDecisions = entry.field_decisions || {};
+
+        const clientName = fieldSnapshot['First Name']
+          ? `${fieldSnapshot['First Name']} ${fieldSnapshot['Family Name'] || ''}`.trim()
+          : fieldSnapshot.full_name || 'Unknown Client';
+
+        return `
+          <div class="merge-card">
+            <div class="merge-header">
+              <div class="merge-title">${clientName}</div>
+              <div>
+                <span class="merge-badge badge-merge">${action}</span>
+                ${confidence ? `<span class="merge-badge badge-confidence">${confidence}%</span>` : ''}
+              </div>
+            </div>
+
+            <div class="merge-meta">
+              <div class="meta-item">
+                <div class="meta-label">Timestamp</div>
+                <div class="meta-value">${timestamp}</div>
+              </div>
+              ${mergeId ? `
+                <div class="meta-item">
+                  <div class="meta-label">Merge ID</div>
+                  <div class="meta-value">${mergeId}</div>
+                </div>
+              ` : ''}
+              ${survivorId ? `
+                <div class="meta-item">
+                  <div class="meta-label">Survivor Record</div>
+                  <div class="meta-value">${survivorId}</div>
+                </div>
+              ` : ''}
+            </div>
+
+            ${matchReasons.length > 0 ? `
+              <div class="section-title">Match Reasons</div>
+              <div class="reason-tags">
+                ${matchReasons.map(r => `<span class="reason-tag">${r}</span>`).join('')}
+              </div>
+            ` : ''}
+
+            ${renderFieldDecisions(fieldDecisions)}
+            ${renderBoxInfo({...entry, ...fieldSnapshot, field_decisions: fieldDecisions})}
+          </div>
+        `;
+      }
+
+      // Render unparsed data
+      function renderUnparsed(text) {
+        return `
+          <div class="error-state">
+            <strong>Could not parse merge data</strong>
+            <pre style="margin-top: 10px; white-space: pre-wrap; font-size: 11px;">${text.substring(0, 500)}${text.length > 500 ? '...' : ''}</pre>
+          </div>
+        `;
+      }
+
+      // Main render function
+      function renderMergeViewer(parsed) {
+        if (!parsed) {
+          return '<div class="no-data">No merge data found</div>';
+        }
+
+        switch (parsed.type) {
+          case 'json':
+            return parsed.data.map((entry, i) => renderMergeEntry(entry, i)).join('');
+          case 'simple':
+            return renderSimpleMerge(parsed.data);
+          case 'unparsed':
+            return renderUnparsed(parsed.data);
+          default:
+            return '<div class="no-data">Unknown data format</div>';
+        }
+      }
+
+      // Find and process merge data elements
+      function findAndRenderMergeData() {
+        const container = document.getElementById(CONFIG.targetId);
+        if (!container) return false;
+
+        // Try each selector
+        for (const selector of CONFIG.selectors) {
+          const elements = document.querySelectorAll(selector);
+          for (const el of elements) {
+            const text = el.textContent || el.innerText;
+            const parsed = parseMergeData(text);
+
+            if (parsed) {
+              const html = renderMergeViewer(parsed);
+
+              if (CONFIG.mode === 'replace') {
+                // Hide original element and show our viewer
+                el.style.display = 'none';
+                container.innerHTML = html;
+              } else {
+                container.innerHTML = html;
+              }
+
+              return true;
+            }
+          }
+        }
+
+        return false;
+      }
+
+      // Initialize with polling for dynamic content
+      function init() {
+        let pollCount = 0;
+
+        function poll() {
+          const found = findAndRenderMergeData();
+
+          if (!found && CONFIG.pollInterval > 0 && pollCount < CONFIG.maxPolls) {
+            pollCount++;
+            setTimeout(poll, CONFIG.pollInterval);
+          }
+        }
+
+        // Initial attempt
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', poll);
+        } else {
+          poll();
+        }
+
+        // Also listen for mutations (for SPA/dynamic content)
+        const observer = new MutationObserver(() => {
+          if (!document.querySelector('.merge-card, .simple-merge-info')) {
+            findAndRenderMergeData();
+          }
+        });
+
+        observer.observe(document.body, {
+          childList: true,
+          subtree: true
+        });
+      }
+
+      // Expose API for manual use
+      window.MergeViewer = {
+        parse: parseMergeData,
+        render: renderMergeViewer,
+        refresh: findAndRenderMergeData,
+        renderToElement: function(elementOrId, data) {
+          const el = typeof elementOrId === 'string'
+            ? document.getElementById(elementOrId)
+            : elementOrId;
+          if (el) {
+            const parsed = typeof data === 'string' ? parseMergeData(data) : { type: 'json', data: [data] };
+            el.innerHTML = renderMergeViewer(parsed);
+          }
+        }
+      };
+
+      // Auto-initialize
+      init();
+    })();
+  </script>
+</body>
+</html>
