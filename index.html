@@ -919,6 +919,10 @@ class AirtableClient {
     });
   }
 
+  async getRecord(tableName, recordId) {
+    return this.request(`${this.baseUrl}/${encodeURIComponent(tableName)}/${recordId}`);
+  }
+
   async createRecord(tableName, fields) {
     return this.request(`${this.baseUrl}/${encodeURIComponent(tableName)}`, {
       method: 'POST', body: JSON.stringify({ fields }),
@@ -1104,13 +1108,61 @@ const findDuplicateCandidates = (records, onProgress) => {
 // HISTORY FUNCTIONS
 // ============================================
 
-const parseDedupeHistory = (historyField) => {
+const parseDedupeHistory = (historyField, options = {}) => {
+  const { throwOnParseError = false } = options;
   if (!historyField) return [];
   try {
     const parsed = JSON.parse(historyField);
     if (Array.isArray(parsed)) return parsed;
+    // Non-array data exists - this is an error condition
+    if (throwOnParseError) {
+      throw new Error('Dedupe history exists but is not an array - cannot safely append');
+    }
+    console.warn('Dedupe history is not an array, returning empty to preserve data');
     return [];
-  } catch { return []; }
+  } catch (err) {
+    // Parse error on existing data - this is dangerous for append-only
+    if (throwOnParseError) {
+      throw new Error(`Cannot parse existing dedupe history - refusing to overwrite: ${err.message}`);
+    }
+    console.warn('Failed to parse dedupe history:', err.message);
+    return [];
+  }
+};
+
+// Safely append to dedupe history - ensures we never lose existing entries
+const appendToDedupeHistory = (existingHistoryField, newEntry) => {
+  // Parse existing history - throw if we can't parse existing data
+  const existingHistory = parseDedupeHistory(existingHistoryField, { throwOnParseError: true });
+  const previousCount = existingHistory.length;
+
+  // Append the new entry
+  existingHistory.push(newEntry);
+
+  // Validate append-only: new length must be exactly previous + 1
+  if (existingHistory.length !== previousCount + 1) {
+    throw new Error(`Append-only violation: expected ${previousCount + 1} entries, got ${existingHistory.length}`);
+  }
+
+  return JSON.stringify(existingHistory, null, 2);
+};
+
+// Safely update dedupe history - ensures we never lose existing entries
+// Used for operations that modify existing entries (like adding unmerge info)
+const updateDedupeHistorySafely = (existingHistoryField, updateFn) => {
+  // Parse existing history - throw if we can't parse existing data
+  const existingHistory = parseDedupeHistory(existingHistoryField, { throwOnParseError: true });
+  const previousCount = existingHistory.length;
+
+  // Apply the update function
+  const updatedHistory = updateFn([...existingHistory]);
+
+  // Validate append-only: we should never have fewer entries
+  if (updatedHistory.length < previousCount) {
+    throw new Error(`Append-only violation: history shrank from ${previousCount} to ${updatedHistory.length} entries`);
+  }
+
+  return JSON.stringify(updatedHistory, null, 2);
 };
 
 const buildMergeHistoryEntry = (survivor, merged, fieldDecisions, matchInfo, notes = '', boxMigration = null) => {
@@ -1333,9 +1385,8 @@ function MergeReviewModal({ candidate, schema, credentials, onComplete, onSkip, 
 
       // Build history entry with box migration info
       const historyEntry = buildMergeHistoryEntry(candidate.survivor, candidate.merged, fieldDecisions, candidate, notes, boxMigrationRecord);
-      const existingHistory = parseDedupeHistory(survivorFields['dedupe_history']);
-      existingHistory.push(historyEntry);
-      updateFields['dedupe_history'] = JSON.stringify(existingHistory, null, 2);
+      // Use append-only function to ensure we never lose existing history
+      updateFields['dedupe_history'] = appendToDedupeHistory(survivorFields['dedupe_history'], historyEntry);
 
       addLog(`Merging ${candidate.merged.name} into ${candidate.survivor.name}...`, 'info');
       await client.updateRecord(credentials.tableName, candidate.survivor.record.id, updateFields);
@@ -1701,24 +1752,37 @@ function HistoryViewer({ credentials, addLog }) {
       const restored = await client.createRecord(credentials.tableName, fieldsToRestore);
       addLog(`Record restored with new ID: ${restored.id}`, 'success');
 
-      // Update history to mark this as unmerged
-      const updatedHistory = [...history];
-      if (!updatedHistory[eventIdx].unmerged_records) {
-        updatedHistory[eventIdx].unmerged_records = [];
-      }
-      updatedHistory[eventIdx].unmerged_records.push({
-        original_record_id: mergedRecord.original_record_id,
-        restored_record_id: restored.id,
-        unmerged_at: new Date().toISOString(),
-        unmerged_by: 'user'
+      // Fetch fresh history from Airtable to ensure append-only behavior
+      addLog('Fetching current history from database...', 'info');
+      const freshRecord = await client.getRecord(credentials.tableName, selectedRecord.id);
+      const currentHistoryField = freshRecord?.fields?.dedupe_history;
+
+      // Use safe update function to ensure we never lose history
+      const updatedHistoryJson = updateDedupeHistorySafely(currentHistoryField, (historyArray) => {
+        // Find the event by merge_id to ensure we update the correct one
+        const targetEvent = historyArray.find(e => e.merge_id === event.merge_id);
+        if (!targetEvent) {
+          throw new Error('Cannot find merge event in current history - history may have changed');
+        }
+        if (!targetEvent.unmerged_records) {
+          targetEvent.unmerged_records = [];
+        }
+        targetEvent.unmerged_records.push({
+          original_record_id: mergedRecord.original_record_id,
+          restored_record_id: restored.id,
+          unmerged_at: new Date().toISOString(),
+          unmerged_by: 'user'
+        });
+        return historyArray;
       });
 
       // Update the survivor record's history
       await client.updateRecord(credentials.tableName, selectedRecord.id, {
-        dedupe_history: JSON.stringify(updatedHistory, null, 2)
+        dedupe_history: updatedHistoryJson
       });
 
-      setHistory(updatedHistory);
+      // Update local state with fresh parsed history
+      setHistory(parseDedupeHistory(updatedHistoryJson));
       addLog('Unmerge completed successfully!', 'success');
       setConfirmUnmerge(null);
 
@@ -2138,9 +2202,8 @@ function BulkMergeModal({ selectedCandidates, schema, credentials, onComplete, o
 
         // Build history entry with box migration info
         const historyEntry = buildMergeHistoryEntry(candidate.survivor, candidate.merged, fieldDecisions, candidate, 'Bulk merge - auto-resolved', boxMigrationRecord);
-        const existingHistory = parseDedupeHistory(survivorFields['dedupe_history']);
-        existingHistory.push(historyEntry);
-        updateFields['dedupe_history'] = JSON.stringify(existingHistory, null, 2);
+        // Use append-only function to ensure we never lose existing history
+        updateFields['dedupe_history'] = appendToDedupeHistory(survivorFields['dedupe_history'], historyEntry);
 
         // Perform the merge
         await client.updateRecord(credentials.tableName, candidate.survivor.record.id, updateFields);
