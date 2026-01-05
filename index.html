@@ -1160,12 +1160,18 @@ function LoginScreen({ onLogin }) {
 // ============================================
 
 function MergeReviewModal({ candidate, schema, credentials, onComplete, onSkip, onClose, addLog }) {
-  const [fieldDecisions, setFieldDecisions] = useState({});
   const [notes, setNotes] = useState('');
   const [merging, setMerging] = useState(false);
+  const [userOverrides, setUserOverrides] = useState({});
 
   const survivorFields = candidate.survivor.record.fields || {};
   const mergedFields = candidate.merged.record.fields || {};
+
+  // Reset overrides when candidate changes
+  const candidateId = candidate.id;
+  useEffect(() => {
+    setUserOverrides({});
+  }, [candidateId]);
 
   // Get all unique field names
   const allFieldNames = useMemo(() => {
@@ -1173,15 +1179,22 @@ function MergeReviewModal({ candidate, schema, credentials, onComplete, onSkip, 
     return Array.from(names).sort();
   }, [survivorFields, mergedFields]);
 
-  // Initialize decisions
-  useEffect(() => {
+  // Compute decisions with auto-resolve - always returns complete decisions
+  const fieldDecisions = useMemo(() => {
     const decisions = {};
+    const isEmpty = (v) => v === null || v === undefined || (typeof v === 'string' && !v.trim()) || (Array.isArray(v) && v.length === 0);
+
     allFieldNames.forEach(fieldName => {
+      // Check for user override first
+      if (userOverrides[fieldName]) {
+        decisions[fieldName] = userOverrides[fieldName];
+        return;
+      }
+
       const isComputed = schema.computedFields.includes(fieldName);
       const isExcluded = EXCLUDE_FROM_MERGE.includes(fieldName);
       const valA = survivorFields[fieldName];
       const valB = mergedFields[fieldName];
-      const isEmpty = (v) => v === null || v === undefined || (typeof v === 'string' && !v.trim()) || (Array.isArray(v) && v.length === 0);
 
       if (isComputed || isExcluded) {
         decisions[fieldName] = { strategy: 'skip', value: null, include: false };
@@ -1208,15 +1221,15 @@ function MergeReviewModal({ candidate, schema, credentials, onComplete, onSkip, 
         };
       }
     });
-    setFieldDecisions(decisions);
-  }, [candidate, schema]);
+    return decisions;
+  }, [allFieldNames, survivorFields, mergedFields, schema, userOverrides]);
 
   const pendingDecisions = Object.entries(fieldDecisions).filter(([_, d]) => d.needsDecision);
 
   const handlePick = (fieldName, pick) => {
     const valA = survivorFields[fieldName];
     const valB = mergedFields[fieldName];
-    setFieldDecisions(prev => ({
+    setUserOverrides(prev => ({
       ...prev,
       [fieldName]: { strategy: pick, value: pick === 'keep_a' ? valA : valB, include: true, needsDecision: false }
     }));
@@ -1382,7 +1395,7 @@ function MergeReviewModal({ candidate, schema, credentials, onComplete, onSkip, 
                   </div>
                   <div
                     className={`diff-cell ${isSame ? 'same' : 'different'} ${decision.strategy === 'keep_a' ? 'selected' : ''} ${!isSame && !isComputed && !isExcluded ? 'clickable' : ''}`}
-                    onClick={() => !isSame && !isComputed && !isExcluded && setFieldDecisions(prev => ({
+                    onClick={() => !isSame && !isComputed && !isExcluded && setUserOverrides(prev => ({
                       ...prev,
                       [fieldName]: { strategy: 'keep_a', value: valA, include: true, needsDecision: false, autoResolved: false }
                     }))}
@@ -1391,7 +1404,7 @@ function MergeReviewModal({ candidate, schema, credentials, onComplete, onSkip, 
                   </div>
                   <div
                     className={`diff-cell ${isSame ? 'same' : 'different'} ${decision.strategy === 'keep_b' ? 'selected' : ''} ${!isSame && !isComputed && !isExcluded ? 'clickable' : ''}`}
-                    onClick={() => !isSame && !isComputed && !isExcluded && setFieldDecisions(prev => ({
+                    onClick={() => !isSame && !isComputed && !isExcluded && setUserOverrides(prev => ({
                       ...prev,
                       [fieldName]: { strategy: 'keep_b', value: valB, include: true, needsDecision: false, autoResolved: false }
                     }))}
