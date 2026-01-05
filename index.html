@@ -33,13 +33,17 @@
 
     .input-group { margin-bottom: 15px; }
     .input-group label { display: block; margin-bottom: 5px; color: #94a3b8; }
-    input[type="text"], input[type="password"], select, textarea {
+    input[type="text"], input[type="password"], input[type="date"], select, textarea {
       width: 100%;
       padding: 10px;
       border: 1px solid #475569;
       border-radius: 6px;
       background: #1e293b;
       color: #e2e8f0;
+    }
+    input[type="date"]::-webkit-calendar-picker-indicator {
+      filter: invert(0.8);
+      cursor: pointer;
     }
     input:focus, select:focus, textarea:focus { outline: none; border-color: #6366f1; }
 
@@ -2336,6 +2340,8 @@ function MainApp({ accessLevel, onLogout }) {
   const [tierFilter, setTierFilter] = useState('all');
   const [searchFilter, setSearchFilter] = useState('');
   const [bahrFilter, setBahrFilter] = useState('all');
+  const [createdDateFrom, setCreatedDateFrom] = useState('');
+  const [createdDateTo, setCreatedDateTo] = useState('');
   // Selection state for bulk operations
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [lastSelectedIndex, setLastSelectedIndex] = useState(null);
@@ -2367,7 +2373,9 @@ function MainApp({ accessLevel, onLogout }) {
       const filter = isBahrOnly ? '{Bahr Client}' : '';
       addLog(`Fetching ${isBahrOnly ? 'Bahr clients' : 'all clients'}...`, 'info');
 
-      const records = await client.getAllRecords(CLIENT_INFO_TABLE, [...tableSchema.writableFields, 'dedupe_history'], filter,
+      // Include Created field for filtering (it's a computed field)
+      const fieldsToFetch = [...tableSchema.writableFields, 'dedupe_history', 'Created'];
+      const records = await client.getAllRecords(CLIENT_INFO_TABLE, fieldsToFetch, filter,
         (p) => addLog(`Page ${p.page}: ${p.total} records`, 'info'));
 
       setAllRecords(records);
@@ -2482,8 +2490,23 @@ function MainApp({ accessLevel, onLogout }) {
         c.merged.record.id.includes(q)
       );
     }
+    // Filter by Created date
+    if (createdDateFrom || createdDateTo) {
+      result = result.filter(c => {
+        const survivorCreated = c.survivor.record.fields['Created'] || c.survivor.record.fields['createdTime'];
+        const mergedCreated = c.merged.record.fields['Created'] || c.merged.record.fields['createdTime'];
+        // Use the earliest created date between the two records
+        const createdDate = survivorCreated || mergedCreated;
+        if (!createdDate) return true; // Include if no date
+
+        const recordDate = new Date(createdDate).toISOString().split('T')[0];
+        if (createdDateFrom && recordDate < createdDateFrom) return false;
+        if (createdDateTo && recordDate > createdDateTo) return false;
+        return true;
+      });
+    }
     return result;
-  }, [candidates, tierFilter, bahrFilter, searchFilter]);
+  }, [candidates, tierFilter, bahrFilter, searchFilter, createdDateFrom, createdDateTo]);
 
   const stats = useMemo(() => ({
     total: allRecords.length,
@@ -2572,7 +2595,9 @@ function MainApp({ accessLevel, onLogout }) {
                   </div>
                 )}
               </div>
-              <div className="filter-controls">
+
+              {/* Filter Controls */}
+              <div className="filter-controls" style={{ marginBottom: '10px' }}>
                 <select value={tierFilter} onChange={e => setTierFilter(e.target.value)}>
                   <option value="all">All Tiers</option>
                   <option value="1">Tier 1 - Definitive</option>
@@ -2582,11 +2607,42 @@ function MainApp({ accessLevel, onLogout }) {
                 </select>
                 <select value={bahrFilter} onChange={e => setBahrFilter(e.target.value)}>
                   <option value="all">All Clients</option>
-                  <option value="yes">Bahr Clients Only</option>
+                  <option value="yes">Bahr Client = T Only</option>
                   <option value="no">Non-Bahr Clients Only</option>
                 </select>
                 <input type="text" value={searchFilter} onChange={e => setSearchFilter(e.target.value)} placeholder="Search by name or ID..." />
               </div>
+
+              {/* Date Filter */}
+              <div className="filter-controls" style={{ marginBottom: '15px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <label style={{ color: '#94a3b8', fontSize: '0.9em', whiteSpace: 'nowrap' }}>Created From:</label>
+                  <input
+                    type="date"
+                    value={createdDateFrom}
+                    onChange={e => setCreatedDateFrom(e.target.value)}
+                    style={{ width: 'auto', minWidth: '140px' }}
+                  />
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <label style={{ color: '#94a3b8', fontSize: '0.9em', whiteSpace: 'nowrap' }}>To:</label>
+                  <input
+                    type="date"
+                    value={createdDateTo}
+                    onChange={e => setCreatedDateTo(e.target.value)}
+                    style={{ width: 'auto', minWidth: '140px' }}
+                  />
+                </div>
+                {(createdDateFrom || createdDateTo) && (
+                  <button
+                    className="secondary small"
+                    onClick={() => { setCreatedDateFrom(''); setCreatedDateTo(''); }}
+                  >
+                    Clear Dates
+                  </button>
+                )}
+              </div>
+
               <div style={{ fontSize: '0.85em', color: '#94a3b8', marginBottom: '10px' }}>
                 Tip: Click checkbox to select, Shift+click to select range, Ctrl/Cmd+click to toggle
               </div>
@@ -2600,10 +2656,12 @@ function MainApp({ accessLevel, onLogout }) {
                           checked={filteredCandidates.length > 0 && selectedIds.size === filteredCandidates.length}
                           onChange={handleSelectAll}
                           style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                          title="Select all"
                         />
                       </th>
                       <th>Confidence</th>
                       <th>Bahr Client</th>
+                      <th>Created</th>
                       <th>Keep (Record A)</th>
                       <th>Merge (Record B)</th>
                       <th>Match Reasons</th>
@@ -2611,50 +2669,68 @@ function MainApp({ accessLevel, onLogout }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredCandidates.map((c, idx) => (
-                      <tr
-                        key={c.id}
-                        className="clickable"
-                        style={{
-                          background: selectedIds.has(c.id) ? 'rgba(99, 102, 241, 0.2)' : undefined
-                        }}
-                      >
-                        <td onClick={e => e.stopPropagation()}>
-                          <input
-                            type="checkbox"
-                            checked={selectedIds.has(c.id)}
-                            onChange={(e) => handleRowSelect(c, idx, e)}
-                            onClick={(e) => handleRowSelect(c, idx, e)}
-                            style={{ width: '18px', height: '18px', cursor: 'pointer' }}
-                          />
-                        </td>
-                        <td onClick={() => setSelectedCandidate(c)}>
-                          <span className={`badge tier${c.tier.tier}`}>{c.confidence}%</span>
-                          <div style={{ fontSize: '0.75em', color: '#94a3b8' }}>{c.tier.name}</div>
-                        </td>
-                        <td onClick={() => setSelectedCandidate(c)}>
-                          {(c.survivor.record.fields['Bahr Client'] || c.merged.record.fields['Bahr Client']) ? (
-                            <span style={{ background: '#6366f1', color: 'white', padding: '2px 8px', borderRadius: '4px', fontSize: '0.8em' }}>Yes</span>
-                          ) : (
-                            <span style={{ color: '#64748b', fontSize: '0.8em' }}>No</span>
-                          )}
-                        </td>
-                        <td onClick={() => setSelectedCandidate(c)}>
-                          <div style={{ fontWeight: '500' }}>{c.survivor.name}</div>
-                          <div style={{ fontSize: '0.75em', color: '#94a3b8' }}>Score: {c.survivor.score}</div>
-                        </td>
-                        <td onClick={() => setSelectedCandidate(c)}>
-                          <div>{c.merged.name}</div>
-                          <div style={{ fontSize: '0.75em', color: '#94a3b8' }}>Score: {c.merged.score}</div>
-                        </td>
-                        <td onClick={() => setSelectedCandidate(c)}>
-                          {c.reasons.slice(0, 2).map((r, i) => <span key={i} className="reason-tag">{r}</span>)}
-                          {c.reasons.length > 2 && <span className="reason-tag">+{c.reasons.length - 2}</span>}
-                          {c.conflicts?.map((cf, i) => <span key={i} className="reason-tag conflict">{cf}</span>)}
-                        </td>
-                        <td><button className="primary small" onClick={() => setSelectedCandidate(c)}>Review</button></td>
-                      </tr>
-                    ))}
+                    {filteredCandidates.map((c, idx) => {
+                      const survivorCreated = c.survivor.record.fields['Created'] || c.survivor.record.fields['createdTime'];
+                      const mergedCreated = c.merged.record.fields['Created'] || c.merged.record.fields['createdTime'];
+                      const displayDate = survivorCreated || mergedCreated;
+                      const isTier4 = c.tier.tier === 4;
+
+                      return (
+                        <tr
+                          key={c.id}
+                          className="clickable"
+                          style={{
+                            background: selectedIds.has(c.id) ? 'rgba(99, 102, 241, 0.2)' : undefined
+                          }}
+                        >
+                          <td onClick={e => e.stopPropagation()}>
+                            <input
+                              type="checkbox"
+                              checked={selectedIds.has(c.id)}
+                              onChange={(e) => handleRowSelect(c, idx, e)}
+                              onClick={(e) => handleRowSelect(c, idx, e)}
+                              disabled={isTier4}
+                              style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                              title={isTier4 ? "Tier 4 conflicts must be reviewed individually" : "Select for bulk merge"}
+                            />
+                          </td>
+                          <td onClick={() => setSelectedCandidate(c)}>
+                            <span className={`badge tier${c.tier.tier}`}>{c.confidence}%</span>
+                            <div style={{ fontSize: '0.75em', color: '#94a3b8' }}>{c.tier.name}</div>
+                          </td>
+                          <td onClick={() => setSelectedCandidate(c)}>
+                            {(c.survivor.record.fields['Bahr Client'] || c.merged.record.fields['Bahr Client']) ? (
+                              <span style={{ background: '#6366f1', color: 'white', padding: '2px 8px', borderRadius: '4px', fontSize: '0.8em' }}>Yes</span>
+                            ) : (
+                              <span style={{ color: '#64748b', fontSize: '0.8em' }}>No</span>
+                            )}
+                          </td>
+                          <td onClick={() => setSelectedCandidate(c)}>
+                            {displayDate ? (
+                              <span style={{ fontSize: '0.8em', color: '#94a3b8' }}>
+                                {new Date(displayDate).toLocaleDateString()}
+                              </span>
+                            ) : (
+                              <span style={{ color: '#64748b', fontSize: '0.8em' }}>-</span>
+                            )}
+                          </td>
+                          <td onClick={() => setSelectedCandidate(c)}>
+                            <div style={{ fontWeight: '500' }}>{c.survivor.name}</div>
+                            <div style={{ fontSize: '0.75em', color: '#94a3b8' }}>Score: {c.survivor.score}</div>
+                          </td>
+                          <td onClick={() => setSelectedCandidate(c)}>
+                            <div>{c.merged.name}</div>
+                            <div style={{ fontSize: '0.75em', color: '#94a3b8' }}>Score: {c.merged.score}</div>
+                          </td>
+                          <td onClick={() => setSelectedCandidate(c)}>
+                            {c.reasons.slice(0, 2).map((r, i) => <span key={i} className="reason-tag">{r}</span>)}
+                            {c.reasons.length > 2 && <span className="reason-tag">+{c.reasons.length - 2}</span>}
+                            {c.conflicts?.map((cf, i) => <span key={i} className="reason-tag conflict">{cf}</span>)}
+                          </td>
+                          <td><button className="primary small" onClick={() => setSelectedCandidate(c)}>Review</button></td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
