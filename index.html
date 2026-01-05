@@ -1078,21 +1078,41 @@ const parseDedupeHistory = (historyField) => {
   } catch { return []; }
 };
 
-const buildMergeHistoryEntry = (survivor, merged, fieldDecisions, matchInfo, notes = '') => ({
-  merge_id: generateMergeId(),
-  timestamp: new Date().toISOString(),
-  action: 'merge',
-  confidence: matchInfo.confidence,
-  match_reasons: matchInfo.reasons,
-  survivor_record_id: survivor.record.id,
-  merged_records: [{
-    original_record_id: merged.record.id,
-    field_snapshot: { ...merged.record.fields },
-  }],
-  field_decisions: fieldDecisions,
-  performed_by: 'user',
-  notes,
-});
+const buildMergeHistoryEntry = (survivor, merged, fieldDecisions, matchInfo, notes = '', boxMigration = null) => {
+  const entry = {
+    merge_id: generateMergeId(),
+    timestamp: new Date().toISOString(),
+    action: 'merge',
+    confidence: matchInfo.confidence,
+    match_reasons: matchInfo.reasons,
+    survivor_record_id: survivor.record.id,
+    merged_records: [{
+      original_record_id: merged.record.id,
+      field_snapshot: { ...merged.record.fields },
+    }],
+    field_decisions: fieldDecisions,
+    performed_by: 'user',
+    notes,
+  };
+
+  // Add box migration info if applicable
+  if (boxMigration) {
+    entry.box_migration = {
+      required: true,
+      keep_folder_id: boxMigration.keepBoxFolderId,
+      delete_folder_id: boxMigration.deleteBoxFolderId,
+      keep_folder_url: boxMigration.keepBoxUrl,
+      delete_folder_url: boxMigration.deleteBoxUrl,
+      webhook_sent: boxMigration.webhookSent,
+      webhook_sent_at: boxMigration.webhookSentAt,
+      webhook_response: boxMigration.webhookResponse,
+      migration_confirmed: boxMigration.migrationConfirmed || false,
+      migration_confirmed_at: boxMigration.migrationConfirmedAt || null
+    };
+  }
+
+  return entry;
+};
 
 // ============================================
 // LOGIN COMPONENT
@@ -1213,6 +1233,7 @@ function MergeReviewModal({ candidate, schema, credentials, onComplete, onSkip, 
       const client = new AirtableClient(credentials.apiKey, credentials.baseId);
 
       // Check if Box folder migration is needed and send webhook
+      let boxMigrationRecord = null;
       const boxMigration = getBoxMigrationInfo(survivorFields, mergedFields);
       if (boxMigration.needsMigration) {
         addLog(`Box migration needed: ${boxMigration.deleteBoxFolderId} -> ${boxMigration.keepBoxFolderId}`, 'info');
@@ -1230,8 +1251,25 @@ function MergeReviewModal({ candidate, schema, credentials, onComplete, onSkip, 
           deleteBoxName: boxMigration.deleteBoxName
         });
 
+        // Record webhook result for history
+        boxMigrationRecord = {
+          keepBoxFolderId: boxMigration.keepBoxFolderId,
+          deleteBoxFolderId: boxMigration.deleteBoxFolderId,
+          keepBoxUrl: boxMigration.keepBoxUrl,
+          deleteBoxUrl: boxMigration.deleteBoxUrl,
+          webhookSent: webhookResult.success,
+          webhookSentAt: new Date().toISOString(),
+          webhookResponse: webhookResult.result || null,
+          webhookError: webhookResult.error || null,
+          migrationConfirmed: webhookResult.result?.migrationConfirmed || false,
+          migrationConfirmedAt: webhookResult.result?.migrationConfirmedAt || null
+        };
+
         if (webhookResult.success) {
           addLog(`Box migration webhook sent successfully`, 'success');
+          if (webhookResult.result?.migrationConfirmed) {
+            addLog(`Migration confirmed by n8n`, 'success');
+          }
         } else {
           addLog(`Box migration webhook failed: ${webhookResult.error}`, 'warning');
         }
@@ -1245,8 +1283,8 @@ function MergeReviewModal({ candidate, schema, credentials, onComplete, onSkip, 
         }
       });
 
-      // Build history entry
-      const historyEntry = buildMergeHistoryEntry(candidate.survivor, candidate.merged, fieldDecisions, candidate, notes);
+      // Build history entry with box migration info
+      const historyEntry = buildMergeHistoryEntry(candidate.survivor, candidate.merged, fieldDecisions, candidate, notes, boxMigrationRecord);
       const existingHistory = parseDedupeHistory(survivorFields['dedupe_history']);
       existingHistory.push(historyEntry);
       updateFields['dedupe_history'] = JSON.stringify(existingHistory, null, 2);
@@ -1985,6 +2023,7 @@ function BulkMergeModal({ selectedCandidates, schema, credentials, onComplete, o
         });
 
         // Check if Box folder migration is needed and send webhook
+        let boxMigrationRecord = null;
         const boxMigration = getBoxMigrationInfo(survivorFields, mergedFields);
         if (boxMigration.needsMigration) {
           addLog(`Box migration needed: ${boxMigration.deleteBoxFolderId} -> ${boxMigration.keepBoxFolderId}`, 'info');
@@ -2002,8 +2041,25 @@ function BulkMergeModal({ selectedCandidates, schema, credentials, onComplete, o
             deleteBoxName: boxMigration.deleteBoxName
           });
 
+          // Record webhook result for history
+          boxMigrationRecord = {
+            keepBoxFolderId: boxMigration.keepBoxFolderId,
+            deleteBoxFolderId: boxMigration.deleteBoxFolderId,
+            keepBoxUrl: boxMigration.keepBoxUrl,
+            deleteBoxUrl: boxMigration.deleteBoxUrl,
+            webhookSent: webhookResult.success,
+            webhookSentAt: new Date().toISOString(),
+            webhookResponse: webhookResult.result || null,
+            webhookError: webhookResult.error || null,
+            migrationConfirmed: webhookResult.result?.migrationConfirmed || false,
+            migrationConfirmedAt: webhookResult.result?.migrationConfirmedAt || null
+          };
+
           if (webhookResult.success) {
             addLog(`Box migration webhook sent successfully`, 'success');
+            if (webhookResult.result?.migrationConfirmed) {
+              addLog(`Migration confirmed by n8n`, 'success');
+            }
           } else {
             addLog(`Box migration webhook failed: ${webhookResult.error}`, 'warning');
           }
@@ -2015,7 +2071,9 @@ function BulkMergeModal({ selectedCandidates, schema, credentials, onComplete, o
             survivorRecordName: candidate.survivor.name,
             keepBoxFolderId: boxMigration.keepBoxFolderId,
             deleteBoxFolderId: boxMigration.deleteBoxFolderId,
-            webhookSent: webhookResult.success
+            webhookSent: webhookResult.success,
+            webhookResponse: webhookResult.result,
+            migrationConfirmed: webhookResult.result?.migrationConfirmed || false
           });
         }
 
@@ -2027,8 +2085,8 @@ function BulkMergeModal({ selectedCandidates, schema, credentials, onComplete, o
           }
         });
 
-        // Build history entry
-        const historyEntry = buildMergeHistoryEntry(candidate.survivor, candidate.merged, fieldDecisions, candidate, 'Bulk merge - auto-resolved');
+        // Build history entry with box migration info
+        const historyEntry = buildMergeHistoryEntry(candidate.survivor, candidate.merged, fieldDecisions, candidate, 'Bulk merge - auto-resolved', boxMigrationRecord);
         const existingHistory = parseDedupeHistory(survivorFields['dedupe_history']);
         existingHistory.push(historyEntry);
         updateFields['dedupe_history'] = JSON.stringify(existingHistory, null, 2);
@@ -2040,7 +2098,7 @@ function BulkMergeModal({ selectedCandidates, schema, credentials, onComplete, o
         newResults.success.push({
           candidate,
           historyEntry,
-          boxDeletions
+          boxMigrationRecord
         });
 
         addLog(`Merged: ${candidate.merged.name} -> ${candidate.survivor.name}`, 'success');
@@ -2191,7 +2249,11 @@ function BulkMergeModal({ selectedCandidates, schema, credentials, onComplete, o
                         </div>
                         <div style={{ marginLeft: '15px', marginTop: '5px' }}>
                           {item.webhookSent ? (
-                            <span style={{ color: '#10b981', fontSize: '0.8em' }}>Webhook sent</span>
+                            item.migrationConfirmed ? (
+                              <span style={{ color: '#10b981', fontSize: '0.8em' }}>Migration confirmed by n8n</span>
+                            ) : (
+                              <span style={{ color: '#f59e0b', fontSize: '0.8em' }}>Webhook sent - awaiting confirmation</span>
+                            )
                           ) : (
                             <span style={{ color: '#ef4444', fontSize: '0.8em' }}>Webhook failed</span>
                           )}
