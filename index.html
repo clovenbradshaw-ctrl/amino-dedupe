@@ -2169,7 +2169,7 @@ function MatchSettingsPanel({ config, onChange, onRescan, allRecords, schema, di
               <div className="match-field-section-title">
                 Additional Fields
                 {!showAllFields && (
-                  <button className="expand-toggle" onClick={() => setShowAllFields(true)}>
+                  <button className="expand-toggle" onClick={() => setShowAllFields(true)} disabled={disabled}>
                     Show all
                   </button>
                 )}
@@ -2179,7 +2179,7 @@ function MatchSettingsPanel({ config, onChange, onRescan, allRecords, schema, di
           )}
 
           {!showAllFields && !fieldsByCategory.additional.fields.some(f => config.fields[f.id]?.enabled) && (
-            <button className="expand-toggle" onClick={() => setShowAllFields(true)} style={{ marginBottom: '15px' }}>
+            <button className="expand-toggle" onClick={() => setShowAllFields(true)} style={{ marginBottom: '15px' }} disabled={disabled}>
               + Show Additional Fields (Address, City, State, Country)
             </button>
           )}
@@ -2209,7 +2209,7 @@ function MatchSettingsPanel({ config, onChange, onRescan, allRecords, schema, di
                       <option key={fieldName} value={fieldName}>{fieldName}</option>
                     ))}
                   </select>
-                  <button className="secondary small" onClick={() => setShowAddField(false)}>Cancel</button>
+                  <button className="secondary small" onClick={() => setShowAddField(false)} disabled={disabled}>Cancel</button>
                 </div>
               ) : (
                 <button
@@ -2252,7 +2252,7 @@ function MatchSettingsPanel({ config, onChange, onRescan, allRecords, schema, di
                       </option>
                     ))}
                   </select>
-                  <button className="secondary small" onClick={() => setShowJsonFields(false)}>Cancel</button>
+                  <button className="secondary small" onClick={() => setShowJsonFields(false)} disabled={disabled}>Cancel</button>
                 </div>
               ) : (
                 <button
