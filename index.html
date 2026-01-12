@@ -461,6 +461,242 @@
       background: rgba(99, 102, 241, 0.2);
       color: #a5b4fc;
     }
+
+    /* Match Settings Panel */
+    .match-settings-panel {
+      background: rgba(30, 41, 59, 0.9);
+      border: 1px solid #334155;
+      border-radius: 12px;
+      margin-bottom: 20px;
+      overflow: hidden;
+    }
+    .match-settings-header {
+      padding: 15px 20px;
+      background: #1e293b;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      user-select: none;
+    }
+    .match-settings-header:hover {
+      background: #253346;
+    }
+    .match-settings-header h3 {
+      margin: 0;
+      color: #a5b4fc;
+      font-size: 1em;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .match-settings-toggle {
+      color: #94a3b8;
+      font-size: 1.2em;
+      transition: transform 0.2s;
+    }
+    .match-settings-toggle.expanded {
+      transform: rotate(180deg);
+    }
+    .match-settings-body {
+      padding: 20px;
+      border-top: 1px solid #334155;
+    }
+    .match-settings-presets {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+    .preset-btn {
+      padding: 8px 16px;
+      border: 1px solid #475569;
+      background: #1e293b;
+      color: #94a3b8;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.85em;
+      transition: all 0.2s;
+    }
+    .preset-btn:hover {
+      background: #334155;
+      border-color: #6366f1;
+    }
+    .preset-btn.active {
+      background: #6366f1;
+      border-color: #6366f1;
+      color: white;
+    }
+    .match-field-section {
+      margin-bottom: 20px;
+    }
+    .match-field-section-title {
+      font-size: 0.85em;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #334155;
+    }
+    .match-field-row {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      padding: 10px 0;
+      border-bottom: 1px solid rgba(51, 65, 85, 0.5);
+    }
+    .match-field-row:last-child {
+      border-bottom: none;
+    }
+    .match-field-toggle {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 180px;
+    }
+    .match-field-toggle input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      cursor: pointer;
+    }
+    .match-field-toggle label {
+      cursor: pointer;
+      color: #e2e8f0;
+      font-size: 0.9em;
+    }
+    .match-field-toggle.disabled label {
+      color: #64748b;
+    }
+    .match-field-controls {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      flex: 1;
+    }
+    .match-type-select {
+      min-width: 140px;
+      padding: 6px 10px;
+      font-size: 0.85em;
+    }
+    .threshold-slider {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex: 1;
+      max-width: 250px;
+    }
+    .threshold-slider input[type="range"] {
+      flex: 1;
+      height: 6px;
+      -webkit-appearance: none;
+      background: #334155;
+      border-radius: 3px;
+      cursor: pointer;
+    }
+    .threshold-slider input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #6366f1;
+      cursor: pointer;
+    }
+    .threshold-slider input[type="range"]::-moz-range-thumb {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #6366f1;
+      cursor: pointer;
+      border: none;
+    }
+    .threshold-value {
+      min-width: 45px;
+      text-align: center;
+      font-size: 0.85em;
+      color: #a5b4fc;
+      font-weight: 500;
+    }
+    .field-badge {
+      font-size: 0.7em;
+      padding: 2px 6px;
+      border-radius: 3px;
+      margin-left: 8px;
+    }
+    .field-badge.recommended {
+      background: rgba(16, 185, 129, 0.2);
+      color: #10b981;
+    }
+    .field-badge.blocking {
+      background: rgba(239, 68, 68, 0.2);
+      color: #ef4444;
+    }
+    .field-badge.id {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+    .match-settings-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-top: 15px;
+      border-top: 1px solid #334155;
+      margin-top: 10px;
+    }
+    .settings-info {
+      font-size: 0.8em;
+      color: #64748b;
+    }
+    .expand-toggle {
+      background: none;
+      border: none;
+      color: #6366f1;
+      cursor: pointer;
+      font-size: 0.85em;
+      padding: 5px 10px;
+    }
+    .expand-toggle:hover {
+      text-decoration: underline;
+    }
+    .field-tooltip {
+      position: relative;
+      display: inline-block;
+      margin-left: 5px;
+      cursor: help;
+    }
+    .field-tooltip .tooltip-icon {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #334155;
+      color: #94a3b8;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.7em;
+      font-weight: bold;
+    }
+    .field-tooltip .tooltip-text {
+      visibility: hidden;
+      width: 220px;
+      background: #0f172a;
+      color: #e2e8f0;
+      text-align: left;
+      border-radius: 6px;
+      padding: 10px;
+      position: absolute;
+      z-index: 100;
+      bottom: 125%;
+      left: 50%;
+      margin-left: -110px;
+      font-size: 0.8em;
+      line-height: 1.4;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      border: 1px solid #334155;
+    }
+    .field-tooltip:hover .tooltip-text {
+      visibility: visible;
+    }
   </style>
 </head>
 <body>
@@ -489,6 +725,224 @@ const MATCH_TIERS = {
 
 // Fields to exclude from merging
 const EXCLUDE_FROM_MERGE = ['Box Legacy ID'];
+
+// ============================================
+// MATCH CONFIGURATION
+// ============================================
+
+// Field definitions for match configuration
+const MATCH_FIELD_DEFINITIONS = {
+  // Primary Name Matching
+  name: {
+    id: 'name',
+    label: 'Name',
+    category: 'primary',
+    description: 'Compares First Name + Family Name using fuzzy matching, nicknames, and exact match',
+    defaultEnabled: true,
+    defaultType: 'fuzzy',
+    defaultThreshold: 85,
+    supportsFuzzy: true,
+    recommended: true,
+  },
+  // Identity Fields
+  ppid: {
+    id: 'ppid',
+    label: 'PPID',
+    category: 'identity',
+    description: 'Primary Person ID - exact match gives high confidence',
+    defaultEnabled: true,
+    defaultType: 'exact',
+    defaultThreshold: 100,
+    supportsFuzzy: false,
+    badge: 'id',
+  },
+  aNumber: {
+    id: 'aNumber',
+    label: 'A#',
+    category: 'identity',
+    description: 'Alien Number - exact match gives high confidence',
+    defaultEnabled: true,
+    defaultType: 'exact',
+    defaultThreshold: 100,
+    supportsFuzzy: false,
+    badge: 'id',
+  },
+  clioId: {
+    id: 'clioId',
+    label: 'Clio Contact ID',
+    category: 'identity',
+    description: 'Different Clio IDs means records are definitely NOT the same person',
+    defaultEnabled: true,
+    defaultType: 'blocking',
+    defaultThreshold: 100,
+    supportsFuzzy: false,
+    badge: 'blocking',
+    isBlocking: true,
+  },
+  // Contact Fields
+  phone: {
+    id: 'phone',
+    label: 'Phone Number',
+    category: 'contact',
+    description: 'Phone numbers are normalized to 10 digits before comparison',
+    defaultEnabled: true,
+    defaultType: 'normalized',
+    defaultThreshold: 100,
+    supportsFuzzy: true,
+    recommended: true,
+  },
+  email: {
+    id: 'email',
+    label: 'Email',
+    category: 'contact',
+    description: 'Email comparison (ignores null@blank placeholder emails)',
+    defaultEnabled: true,
+    defaultType: 'exact',
+    defaultThreshold: 100,
+    supportsFuzzy: true,
+  },
+  // Personal Fields
+  dob: {
+    id: 'dob',
+    label: 'Date of Birth',
+    category: 'personal',
+    description: 'Exact date match - strong corroborating evidence',
+    defaultEnabled: true,
+    defaultType: 'exact',
+    defaultThreshold: 100,
+    supportsFuzzy: false,
+    recommended: true,
+  },
+  // Additional Fields (collapsed by default)
+  address: {
+    id: 'address',
+    label: 'Address',
+    category: 'additional',
+    description: 'Street address comparison',
+    defaultEnabled: false,
+    defaultType: 'fuzzy',
+    defaultThreshold: 80,
+    supportsFuzzy: true,
+  },
+  city: {
+    id: 'city',
+    label: 'City',
+    category: 'additional',
+    description: 'City name comparison',
+    defaultEnabled: false,
+    defaultType: 'exact',
+    defaultThreshold: 100,
+    supportsFuzzy: true,
+  },
+  state: {
+    id: 'state',
+    label: 'State',
+    category: 'additional',
+    description: 'State comparison',
+    defaultEnabled: false,
+    defaultType: 'exact',
+    defaultThreshold: 100,
+    supportsFuzzy: false,
+  },
+  country: {
+    id: 'country',
+    label: 'Country',
+    category: 'additional',
+    description: 'Country comparison',
+    defaultEnabled: false,
+    defaultType: 'exact',
+    defaultThreshold: 100,
+    supportsFuzzy: false,
+  },
+};
+
+// Match type options
+const MATCH_TYPES = {
+  exact: { id: 'exact', label: 'Exact Match', description: 'Values must be identical' },
+  fuzzy: { id: 'fuzzy', label: 'Fuzzy Match', description: 'Allows similar values based on threshold' },
+  normalized: { id: 'normalized', label: 'Normalized', description: 'Normalizes format before comparing' },
+  blocking: { id: 'blocking', label: 'Blocking', description: 'Different values = definitely not a match' },
+};
+
+// Preset configurations
+const MATCH_PRESETS = {
+  conservative: {
+    id: 'conservative',
+    name: 'Conservative',
+    description: 'High confidence only - exact names + ID matches',
+    config: {
+      name: { enabled: true, type: 'fuzzy', threshold: 95 },
+      ppid: { enabled: true, type: 'exact', threshold: 100 },
+      aNumber: { enabled: true, type: 'exact', threshold: 100 },
+      clioId: { enabled: true, type: 'blocking', threshold: 100 },
+      phone: { enabled: true, type: 'normalized', threshold: 100 },
+      email: { enabled: true, type: 'exact', threshold: 100 },
+      dob: { enabled: true, type: 'exact', threshold: 100 },
+      address: { enabled: false, type: 'fuzzy', threshold: 90 },
+      city: { enabled: false, type: 'exact', threshold: 100 },
+      state: { enabled: false, type: 'exact', threshold: 100 },
+      country: { enabled: false, type: 'exact', threshold: 100 },
+    },
+    minConfidenceForMatch: 85,
+  },
+  balanced: {
+    id: 'balanced',
+    name: 'Balanced',
+    description: 'Default settings - good balance of precision and recall',
+    config: {
+      name: { enabled: true, type: 'fuzzy', threshold: 85 },
+      ppid: { enabled: true, type: 'exact', threshold: 100 },
+      aNumber: { enabled: true, type: 'exact', threshold: 100 },
+      clioId: { enabled: true, type: 'blocking', threshold: 100 },
+      phone: { enabled: true, type: 'normalized', threshold: 100 },
+      email: { enabled: true, type: 'exact', threshold: 100 },
+      dob: { enabled: true, type: 'exact', threshold: 100 },
+      address: { enabled: false, type: 'fuzzy', threshold: 80 },
+      city: { enabled: false, type: 'exact', threshold: 100 },
+      state: { enabled: false, type: 'exact', threshold: 100 },
+      country: { enabled: false, type: 'exact', threshold: 100 },
+    },
+    minConfidenceForMatch: 70,
+  },
+  aggressive: {
+    id: 'aggressive',
+    name: 'Aggressive',
+    description: 'More matches - lower thresholds, may need more review',
+    config: {
+      name: { enabled: true, type: 'fuzzy', threshold: 70 },
+      ppid: { enabled: true, type: 'exact', threshold: 100 },
+      aNumber: { enabled: true, type: 'exact', threshold: 100 },
+      clioId: { enabled: true, type: 'blocking', threshold: 100 },
+      phone: { enabled: true, type: 'fuzzy', threshold: 90 },
+      email: { enabled: true, type: 'fuzzy', threshold: 90 },
+      dob: { enabled: true, type: 'exact', threshold: 100 },
+      address: { enabled: true, type: 'fuzzy', threshold: 70 },
+      city: { enabled: true, type: 'fuzzy', threshold: 85 },
+      state: { enabled: false, type: 'exact', threshold: 100 },
+      country: { enabled: false, type: 'exact', threshold: 100 },
+    },
+    minConfidenceForMatch: 60,
+  },
+};
+
+// Build default config from field definitions
+const buildDefaultMatchConfig = () => {
+  const config = {};
+  Object.values(MATCH_FIELD_DEFINITIONS).forEach(field => {
+    config[field.id] = {
+      enabled: field.defaultEnabled,
+      type: field.defaultType,
+      threshold: field.defaultThreshold,
+    };
+  });
+  return config;
+};
+
+const DEFAULT_MATCH_CONFIG = {
+  preset: 'balanced',
+  fields: buildDefaultMatchConfig(),
+  minConfidenceForMatch: 70,
+};
 
 // Nickname mappings for name matching
 const NICKNAMES = {
@@ -553,7 +1007,7 @@ const stringSimilarity = (a, b) => {
   return Math.round((1 - dist / Math.max(a.length, b.length)) * 100);
 };
 
-const areNamesRelated = (name1, name2) => {
+const areNamesRelated = (name1, name2, threshold = 85) => {
   const n1 = normalizeName(name1);
   const n2 = normalizeName(name2);
   if (n1 === n2) return { match: true, score: 100, reason: 'exact' };
@@ -573,13 +1027,16 @@ const areNamesRelated = (name1, name2) => {
     }
   }
 
-  // Fuzzy match
+  // Fuzzy match - use configurable threshold
   const sim = stringSimilarity(n1, n2);
-  if (sim >= 85) return { match: true, score: sim, reason: 'fuzzy' };
+  if (sim >= threshold) return { match: true, score: sim, reason: 'fuzzy' };
 
-  // Shared parts
+  // Shared parts - lower the bar if threshold is lower
+  const minSharedParts = threshold >= 85 ? 2 : 1;
   const shared = parts1.filter(p => parts2.includes(p));
-  if (shared.length >= 2) return { match: true, score: 80, reason: 'shared_parts' };
+  if (shared.length >= minSharedParts && shared.length >= 2) {
+    return { match: true, score: Math.max(80, sim), reason: 'shared_parts' };
+  }
 
   return { match: false, score: sim, reason: 'no_match' };
 };
@@ -904,10 +1361,12 @@ class AirtableClient {
       params.append('pageSize', '100');
 
       const result = await this.request(`${this.baseUrl}/${encodeURIComponent(tableName)}?${params}`);
-      allRecords.push(...result.records);
+      const newRecords = result.records;
+      allRecords.push(...newRecords);
       offset = result.offset;
       page++;
-      if (onProgress) onProgress({ page, total: allRecords.length, hasMore: !!offset });
+      // Pass the new batch of records for streaming support
+      if (onProgress) onProgress({ page, total: allRecords.length, hasMore: !!offset, records: newRecords });
       if (offset) await new Promise(r => setTimeout(r, 200));
     } while (offset);
     return allRecords;
@@ -965,101 +1424,240 @@ const getDisplayName = (record) => {
     [f['First Name'], f['Middle Name'], f['Family Name']].filter(Boolean).join(' ') || record.id;
 };
 
-const scoreMatch = (recordA, recordB) => {
+// Helper function to compare field values based on match type and threshold
+const compareFieldValues = (valA, valB, matchType, threshold) => {
+  if (!valA || !valB) return { match: false, score: 0 };
+
+  const strA = String(valA).trim().toLowerCase();
+  const strB = String(valB).trim().toLowerCase();
+
+  if (!strA || !strB) return { match: false, score: 0 };
+
+  if (matchType === 'exact') {
+    const isMatch = strA === strB;
+    return { match: isMatch, score: isMatch ? 100 : 0 };
+  }
+
+  if (matchType === 'normalized') {
+    // For phones, normalize to 10 digits
+    const normA = strA.replace(/\D/g, '').slice(-10);
+    const normB = strB.replace(/\D/g, '').slice(-10);
+    if (normA.length >= 10 && normA === normB) {
+      return { match: true, score: 100 };
+    }
+    // Fuzzy fallback if configured
+    const sim = stringSimilarity(normA, normB);
+    return { match: sim >= threshold, score: sim };
+  }
+
+  if (matchType === 'fuzzy') {
+    const sim = stringSimilarity(strA, strB);
+    return { match: sim >= threshold, score: sim };
+  }
+
+  return { match: false, score: 0 };
+};
+
+const scoreMatch = (recordA, recordB, matchConfig = DEFAULT_MATCH_CONFIG) => {
   const fa = recordA.fields || {}, fb = recordB.fields || {};
   const reasons = [], conflicts = [];
   let confidence = 0;
   let hasIdMatch = false;
+  const fieldConfig = matchConfig.fields || {};
 
-  // Different Clio IDs = definitely not a match (null values don't count as different)
-  const clioA = fa['clio_contact_id'], clioB = fb['clio_contact_id'];
-  if (clioA && clioB && clioA !== clioB) {
-    return null; // Definitively not a match
-  }
-
-  // Check for ID conflicts first
-  const idFields = ['PPID', 'A#'];
-  for (const field of idFields) {
-    if (fa[field] && fb[field]) {
-      if (fa[field] === fb[field]) {
-        reasons.push(`${field} exact`);
-        hasIdMatch = true;
-      } else {
-        conflicts.push(`${field}: "${fa[field]}" vs "${fb[field]}"`);
-      }
+  // Handle blocking fields first (like clio_contact_id)
+  const clioConfig = fieldConfig.clioId || { enabled: true, type: 'blocking' };
+  if (clioConfig.enabled) {
+    const clioA = fa['clio_contact_id'], clioB = fb['clio_contact_id'];
+    if (clioA && clioB && clioA !== clioB) {
+      return null; // Definitively not a match
+    }
+    if (clioA && clioB && clioA === clioB) {
+      reasons.push('clio_contact_id exact');
+      hasIdMatch = true;
     }
   }
 
-  // Check clio_contact_id for matches (conflicts already handled above)
-  if (clioA && clioB && clioA === clioB) {
-    reasons.push('clio_contact_id exact');
-    hasIdMatch = true;
-  }
+  // Check for ID conflicts/matches
+  const ppidConfig = fieldConfig.ppid || { enabled: true, type: 'exact' };
+  const aNumConfig = fieldConfig.aNumber || { enabled: true, type: 'exact' };
 
+  const checkIdField = (airtableField, configKey, config) => {
+    if (!config.enabled) return;
+    const valA = fa[airtableField], valB = fb[airtableField];
+    if (valA && valB) {
+      if (valA === valB) {
+        reasons.push(`${airtableField} exact`);
+        hasIdMatch = true;
+      } else {
+        conflicts.push(`${airtableField}: "${valA}" vs "${valB}"`);
+      }
+    }
+  };
+
+  checkIdField('PPID', 'ppid', ppidConfig);
+  checkIdField('A#', 'aNumber', aNumConfig);
+
+  // Return Tier 4 (Conflicts) if there are ID conflicts
   if (conflicts.length > 0) {
     return { tier: MATCH_TIERS.TIER4, confidence: 50, reasons, conflicts, isConflict: true };
   }
 
-  // TIER 1: Full name exact match (100%)
-  const nameA = [fa['First Name'], fa['Family Name']].filter(Boolean).join(' ') || fa['Client Name'];
-  const nameB = [fb['First Name'], fb['Family Name']].filter(Boolean).join(' ') || fb['Client Name'];
-  if (nameA && nameB) {
-    const nameMatch = areNamesRelated(nameA, nameB);
-    if (nameMatch.match) {
-      reasons.push(`Name ${nameMatch.score}% (${nameMatch.reason})`);
-      confidence = nameMatch.score;
+  // Name matching
+  const nameConfig = fieldConfig.name || { enabled: true, type: 'fuzzy', threshold: 85 };
+  if (nameConfig.enabled) {
+    const nameA = [fa['First Name'], fa['Family Name']].filter(Boolean).join(' ') || fa['Client Name'];
+    const nameB = [fb['First Name'], fb['Family Name']].filter(Boolean).join(' ') || fb['Client Name'];
+    if (nameA && nameB) {
+      const threshold = nameConfig.threshold || 85;
+      const nameMatch = areNamesRelated(nameA, nameB, threshold);
+      if (nameMatch.match) {
+        reasons.push(`Name ${nameMatch.score}% (${nameMatch.reason})`);
+        confidence = nameMatch.score;
 
-      // Exact full name match is Tier 1 (Definitive)
-      if (nameMatch.score === 100 && nameMatch.reason === 'exact') {
-        return { tier: MATCH_TIERS.TIER1, confidence: 100, reasons, conflicts, isConflict: false };
+        // Exact full name match is Tier 1 (Definitive)
+        if (nameMatch.score === 100 && nameMatch.reason === 'exact') {
+          return { tier: MATCH_TIERS.TIER1, confidence: 100, reasons, conflicts, isConflict: false };
+        }
       }
     }
   }
 
-  // TIER 2: PPID/ID exact match OR name match with corroboration
+  // ID match boosts confidence
   if (hasIdMatch) {
     confidence = Math.max(confidence, 90);
-    // ID match alone is strong but not definitive
   }
 
   // Corroborating fields boost confidence
   let corroboration = 0;
-  const phoneA = normalizePhone(fa['Phone Number']), phoneB = normalizePhone(fb['Phone Number']);
-  if (phoneA && phoneB && phoneA.length >= 10 && phoneA === phoneB) {
-    reasons.push('Phone exact');
-    corroboration++;
-    confidence = Math.min(100, confidence + 10);
+
+  // Phone matching
+  const phoneConfig = fieldConfig.phone || { enabled: true, type: 'normalized', threshold: 100 };
+  if (phoneConfig.enabled) {
+    const phoneResult = compareFieldValues(
+      fa['Phone Number'],
+      fb['Phone Number'],
+      phoneConfig.type,
+      phoneConfig.threshold
+    );
+    if (phoneResult.match) {
+      reasons.push(`Phone ${phoneResult.score}%`);
+      corroboration++;
+      confidence = Math.min(100, confidence + 10);
+    }
   }
 
-  if (fa['DOB'] && fb['DOB'] && fa['DOB'] === fb['DOB']) {
+  // DOB matching
+  const dobConfig = fieldConfig.dob || { enabled: true, type: 'exact' };
+  if (dobConfig.enabled && fa['DOB'] && fb['DOB'] && fa['DOB'] === fb['DOB']) {
     reasons.push('DOB exact');
     corroboration++;
     confidence = Math.min(100, confidence + 15);
   }
 
-  const emailA = (fa['Client Email'] || '').toLowerCase(), emailB = (fb['Client Email'] || '').toLowerCase();
-  if (emailA && emailB && !emailA.includes('null@blank') && emailA === emailB) {
-    reasons.push('Email exact');
-    corroboration++;
-    confidence = Math.min(100, confidence + 10);
+  // Email matching
+  const emailConfig = fieldConfig.email || { enabled: true, type: 'exact', threshold: 100 };
+  if (emailConfig.enabled) {
+    const emailA = (fa['Client Email'] || '').toLowerCase();
+    const emailB = (fb['Client Email'] || '').toLowerCase();
+    if (emailA && emailB && !emailA.includes('null@blank') && !emailB.includes('null@blank')) {
+      const emailResult = compareFieldValues(emailA, emailB, emailConfig.type, emailConfig.threshold);
+      if (emailResult.match) {
+        reasons.push(`Email ${emailResult.score}%`);
+        corroboration++;
+        confidence = Math.min(100, confidence + 10);
+      }
+    }
   }
 
-  // Determine tier (PPID/ID matches are Tier 2, not Tier 1)
+  // Additional standard fields (address, city, state, country)
+  const additionalFields = [
+    { configKey: 'address', airtableFields: ['Address Line 1', 'Address'], label: 'Address', boost: 5 },
+    { configKey: 'city', airtableFields: ['City'], label: 'City', boost: 5 },
+    { configKey: 'state', airtableFields: ['State'], label: 'State', boost: 3 },
+    { configKey: 'country', airtableFields: ['Country'], label: 'Country', boost: 3 },
+  ];
+
+  additionalFields.forEach(({ configKey, airtableFields, label, boost }) => {
+    const config = fieldConfig[configKey];
+    if (!config || !config.enabled) return;
+
+    let valA, valB;
+    for (const fieldName of airtableFields) {
+      if (!valA && fa[fieldName]) valA = fa[fieldName];
+      if (!valB && fb[fieldName]) valB = fb[fieldName];
+    }
+
+    if (valA && valB) {
+      const result = compareFieldValues(valA, valB, config.type, config.threshold);
+      if (result.match) {
+        reasons.push(`${label} ${result.score}%`);
+        corroboration++;
+        confidence = Math.min(100, confidence + boost);
+      }
+    }
+  });
+
+  // Custom fields (both regular and JSON-derived)
+  Object.entries(fieldConfig).forEach(([configKey, config]) => {
+    if (!config.isCustom || !config.enabled) return;
+
+    let valA, valB;
+
+    if (config.isJsonField && config.jsonKey) {
+      // JSON field - extract value from bahr_import_flatpack_data
+      const sourceField = config.sourceField || 'bahr_import_flatpack_data';
+      try {
+        const jsonA = fa[sourceField];
+        const jsonB = fb[sourceField];
+        const parsedA = jsonA ? (typeof jsonA === 'string' ? JSON.parse(jsonA) : jsonA) : null;
+        const parsedB = jsonB ? (typeof jsonB === 'string' ? JSON.parse(jsonB) : jsonB) : null;
+        valA = parsedA?.[config.jsonKey];
+        valB = parsedB?.[config.jsonKey];
+      } catch (e) {
+        // Skip if JSON parsing fails
+        return;
+      }
+    } else if (config.airtableField) {
+      // Regular custom field
+      valA = fa[config.airtableField];
+      valB = fb[config.airtableField];
+    } else {
+      return;
+    }
+
+    if (valA && valB) {
+      const result = compareFieldValues(valA, valB, config.type, config.threshold);
+      if (result.match) {
+        const label = config.isJsonField ? `JSON:${config.jsonKey}` : (config.label || config.airtableField);
+        reasons.push(`${label} ${result.score}%`);
+        corroboration++;
+        confidence = Math.min(100, confidence + 5);
+      }
+    }
+  });
+
+  // Use configurable minimum confidence
+  const minConfidence = matchConfig.minConfidenceForMatch || 70;
+
+  // Determine tier based on confidence and corroboration
   let tier;
   if (hasIdMatch || confidence >= 85 || (confidence >= 75 && corroboration >= 1)) {
     tier = MATCH_TIERS.TIER2;
-  } else if (confidence >= 70) {
+  } else if (confidence >= minConfidence) {
     tier = MATCH_TIERS.TIER3;
   } else {
-    tier = MATCH_TIERS.TIER3;
+    // Below minimum confidence threshold
+    return null;
   }
 
-  return { tier, confidence: Math.round(Math.max(confidence, 70)), reasons, conflicts, isConflict: false };
+  return { tier, confidence: Math.round(Math.max(confidence, minConfidence)), reasons, conflicts, isConflict: false };
 };
 
-const findDuplicateCandidates = (records, onProgress) => {
+const findDuplicateCandidates = (records, onProgress, matchConfig = DEFAULT_MATCH_CONFIG) => {
   const candidates = [];
   const processed = new Set();
+  const minConfidence = matchConfig.minConfidenceForMatch || 70;
 
   // Group by normalized name for efficiency
   const groups = new Map();
@@ -1082,8 +1680,8 @@ const findDuplicateCandidates = (records, onProgress) => {
         if (processed.has(pairKey)) continue;
         processed.add(pairKey);
 
-        const match = scoreMatch(group[i].record, group[j].record);
-        if (match && (match.confidence >= 70 || match.isConflict)) {
+        const match = scoreMatch(group[i].record, group[j].record, matchConfig);
+        if (match && (match.confidence >= minConfidence || match.isConflict)) {
           const scoreA = scoreRecordQuality(group[i].record);
           const scoreB = scoreRecordQuality(group[j].record);
           const [survivor, merged] = scoreA >= scoreB ? [group[i], group[j]] : [group[j], group[i]];
@@ -1200,6 +1798,495 @@ const buildMergeHistoryEntry = (survivor, merged, fieldDecisions, matchInfo, not
 
   return entry;
 };
+
+// ============================================
+// MATCH SETTINGS PANEL COMPONENT
+// ============================================
+
+function MatchSettingsPanel({ config, onChange, onRescan, allRecords, schema, disabled }) {
+  const [expanded, setExpanded] = useState(false);
+  const [showAllFields, setShowAllFields] = useState(false);
+  const [showAddField, setShowAddField] = useState(false);
+  const [showJsonFields, setShowJsonFields] = useState(false);
+
+  // Extract keys from bahr_import_flatpack_data JSON field
+  const jsonFieldKeys = useMemo(() => {
+    if (!allRecords || allRecords.length === 0) return [];
+
+    const keyCounts = {};
+    const sampleValues = {};
+
+    allRecords.forEach(record => {
+      const jsonData = record.fields?.['bahr_import_flatpack_data'];
+      if (jsonData) {
+        try {
+          const parsed = typeof jsonData === 'string' ? JSON.parse(jsonData) : jsonData;
+          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+            Object.entries(parsed).forEach(([key, value]) => {
+              if (value !== null && value !== undefined && value !== '') {
+                keyCounts[key] = (keyCounts[key] || 0) + 1;
+                if (!sampleValues[key] && typeof value === 'string') {
+                  sampleValues[key] = value.substring(0, 50);
+                }
+              }
+            });
+          }
+        } catch (e) {
+          // Skip invalid JSON
+        }
+      }
+    });
+
+    // Return keys that appear in at least 10 records, sorted by frequency
+    return Object.entries(keyCounts)
+      .filter(([key, count]) => count >= 10)
+      .sort((a, b) => b[1] - a[1])
+      .map(([key, count]) => ({
+        key,
+        count,
+        sampleValue: sampleValues[key] || '',
+        label: `JSON: ${key}`,
+      }));
+  }, [allRecords]);
+
+  // Get available fields from schema that can be added as custom match fields
+  const availableCustomFields = useMemo(() => {
+    if (!schema) return [];
+    const existingFieldIds = Object.keys(MATCH_FIELD_DEFINITIONS);
+    const customFieldIds = Object.keys(config.fields).filter(id => !MATCH_FIELD_DEFINITIONS[id]);
+    const usedIds = [...existingFieldIds, ...customFieldIds];
+
+    // Map of field IDs to their Airtable field names
+    const fieldIdToName = {
+      name: ['First Name', 'Family Name', 'Client Name'],
+      ppid: ['PPID'],
+      aNumber: ['A#'],
+      clioId: ['clio_contact_id'],
+      phone: ['Phone Number'],
+      email: ['Client Email'],
+      dob: ['DOB'],
+      address: ['Address Line 1', 'Address'],
+      city: ['City'],
+      state: ['State'],
+      country: ['Country'],
+    };
+
+    // Get all used field identifiers (both Airtable names and JSON keys)
+    const usedFieldNames = new Set();
+    Object.entries(fieldIdToName).forEach(([id, names]) => {
+      if (usedIds.includes(id)) {
+        names.forEach(n => usedFieldNames.add(n));
+      }
+    });
+    // Also add custom field names and JSON keys that are already added
+    customFieldIds.forEach(id => {
+      const customField = config.fields[id];
+      if (customField) {
+        if (customField.airtableField) usedFieldNames.add(customField.airtableField);
+        if (customField.jsonKey) usedFieldNames.add(`json:${customField.jsonKey}`);
+      }
+    });
+
+    // Filter to writable text-like fields not already used
+    return schema.writableFields
+      .filter(fieldName => !usedFieldNames.has(fieldName))
+      .filter(fieldName => {
+        // Exclude obvious non-matchable fields
+        const lower = fieldName.toLowerCase();
+        return !lower.includes('history') &&
+               !lower.includes('notes') &&
+               !lower.includes('box') &&
+               !lower.includes('sync') &&
+               !lower.includes('import') &&
+               !lower.includes('legacy');
+      })
+      .sort();
+  }, [schema, config.fields]);
+
+  // Get available JSON keys not already added
+  const availableJsonKeys = useMemo(() => {
+    const usedJsonKeys = new Set();
+    Object.values(config.fields).forEach(fieldConfig => {
+      if (fieldConfig.jsonKey) {
+        usedJsonKeys.add(fieldConfig.jsonKey);
+      }
+    });
+    return jsonFieldKeys.filter(item => !usedJsonKeys.has(item.key));
+  }, [jsonFieldKeys, config.fields]);
+
+  const handlePresetChange = (presetId) => {
+    const preset = MATCH_PRESETS[presetId];
+    if (preset) {
+      // Keep any custom fields that were added
+      const customFields = {};
+      Object.entries(config.fields).forEach(([id, fieldConfig]) => {
+        if (!MATCH_FIELD_DEFINITIONS[id]) {
+          customFields[id] = fieldConfig;
+        }
+      });
+
+      onChange({
+        preset: presetId,
+        fields: { ...preset.config, ...customFields },
+        minConfidenceForMatch: preset.minConfidenceForMatch,
+      });
+    }
+  };
+
+  const handleFieldToggle = (fieldId) => {
+    const newFields = { ...config.fields };
+    newFields[fieldId] = { ...newFields[fieldId], enabled: !newFields[fieldId].enabled };
+    onChange({ ...config, preset: 'custom', fields: newFields });
+  };
+
+  const handleFieldTypeChange = (fieldId, type) => {
+    const newFields = { ...config.fields };
+    newFields[fieldId] = { ...newFields[fieldId], type };
+    onChange({ ...config, preset: 'custom', fields: newFields });
+  };
+
+  const handleThresholdChange = (fieldId, threshold) => {
+    const newFields = { ...config.fields };
+    newFields[fieldId] = { ...newFields[fieldId], threshold: parseInt(threshold) };
+    onChange({ ...config, preset: 'custom', fields: newFields });
+  };
+
+  const handleAddCustomField = (airtableFieldName) => {
+    // Generate a unique ID for this custom field
+    const fieldId = 'custom_' + airtableFieldName.toLowerCase().replace(/[^a-z0-9]/g, '_');
+    const newFields = { ...config.fields };
+    newFields[fieldId] = {
+      enabled: true,
+      type: 'fuzzy',
+      threshold: 85,
+      airtableField: airtableFieldName,
+      isCustom: true,
+      label: airtableFieldName,
+    };
+    onChange({ ...config, preset: 'custom', fields: newFields });
+    setShowAddField(false);
+  };
+
+  // Handler for adding JSON field keys as match criteria
+  const handleAddJsonField = (jsonKey) => {
+    const fieldId = 'json_' + jsonKey.toLowerCase().replace(/[^a-z0-9]/g, '_');
+    const newFields = { ...config.fields };
+    newFields[fieldId] = {
+      enabled: true,
+      type: 'fuzzy',
+      threshold: 85,
+      jsonKey: jsonKey,
+      sourceField: 'bahr_import_flatpack_data',
+      isCustom: true,
+      isJsonField: true,
+      label: jsonKey,
+    };
+    onChange({ ...config, preset: 'custom', fields: newFields });
+    setShowJsonFields(false);
+  };
+
+  const handleRemoveCustomField = (fieldId) => {
+    const newFields = { ...config.fields };
+    delete newFields[fieldId];
+    onChange({ ...config, preset: 'custom', fields: newFields });
+  };
+
+  // Group fields by category
+  const fieldsByCategory = useMemo(() => {
+    const categories = {
+      primary: { title: 'Primary Matching', fields: [] },
+      identity: { title: 'Identity Fields', fields: [] },
+      contact: { title: 'Contact Information', fields: [] },
+      personal: { title: 'Personal Information', fields: [] },
+      additional: { title: 'Additional Fields', fields: [] },
+      custom: { title: 'Custom Fields', fields: [] },
+      json: { title: 'JSON Fields (from bahr_import_flatpack_data)', fields: [] },
+    };
+
+    // Add predefined fields
+    Object.entries(MATCH_FIELD_DEFINITIONS).forEach(([id, def]) => {
+      const fieldConfig = config.fields[id] || { enabled: def.defaultEnabled, type: def.defaultType, threshold: def.defaultThreshold };
+      categories[def.category].fields.push({ ...def, ...fieldConfig, id });
+    });
+
+    // Add custom fields (split by type)
+    Object.entries(config.fields).forEach(([id, fieldConfig]) => {
+      if (fieldConfig.isCustom) {
+        if (fieldConfig.isJsonField) {
+          // JSON field
+          categories.json.fields.push({
+            id,
+            label: fieldConfig.label || fieldConfig.jsonKey,
+            description: `From JSON field: bahr_import_flatpack_data.${fieldConfig.jsonKey}`,
+            supportsFuzzy: true,
+            isCustom: true,
+            isJsonField: true,
+            badge: 'json',
+            ...fieldConfig,
+          });
+        } else {
+          // Regular custom field
+          categories.custom.fields.push({
+            id,
+            label: fieldConfig.label || fieldConfig.airtableField,
+            description: `Custom field: ${fieldConfig.airtableField}`,
+            supportsFuzzy: true,
+            isCustom: true,
+            ...fieldConfig,
+          });
+        }
+      }
+    });
+
+    return categories;
+  }, [config.fields]);
+
+  const renderFieldRow = (field) => {
+    const isDisabled = field.isBlocking;
+    const showThreshold = field.supportsFuzzy && (field.type === 'fuzzy' || field.type === 'normalized');
+
+    return (
+      <div key={field.id} className="match-field-row">
+        <div className={`match-field-toggle ${!field.enabled ? 'disabled' : ''}`}>
+          <input
+            type="checkbox"
+            id={`field-${field.id}`}
+            checked={field.enabled}
+            onChange={() => handleFieldToggle(field.id)}
+            disabled={isDisabled || disabled}
+          />
+          <label htmlFor={`field-${field.id}`}>
+            {field.label}
+            {field.recommended && <span className="field-badge recommended">Recommended</span>}
+            {field.badge === 'id' && <span className="field-badge id">ID</span>}
+            {field.badge === 'blocking' && <span className="field-badge blocking">Blocking</span>}
+            {field.badge === 'json' && <span className="field-badge" style={{ background: 'rgba(147, 51, 234, 0.2)', color: '#a78bfa' }}>JSON</span>}
+          </label>
+          <span className="field-tooltip">
+            <span className="tooltip-icon">?</span>
+            <span className="tooltip-text">{field.description}</span>
+          </span>
+        </div>
+
+        <div className="match-field-controls">
+          <select
+            className="match-type-select"
+            value={field.type}
+            onChange={(e) => handleFieldTypeChange(field.id, e.target.value)}
+            disabled={!field.enabled || isDisabled || disabled}
+          >
+            {field.isBlocking ? (
+              <option value="blocking">Blocking (if different = no match)</option>
+            ) : (
+              <>
+                <option value="exact">Exact Match</option>
+                {field.supportsFuzzy && <option value="fuzzy">Fuzzy Match</option>}
+                {field.id === 'phone' && <option value="normalized">Normalized</option>}
+              </>
+            )}
+          </select>
+
+          {showThreshold && field.enabled && !isDisabled && (
+            <div className="threshold-slider">
+              <input
+                type="range"
+                min="50"
+                max="100"
+                value={field.threshold}
+                onChange={(e) => handleThresholdChange(field.id, e.target.value)}
+                disabled={disabled}
+              />
+              <span className="threshold-value">{field.threshold}%</span>
+            </div>
+          )}
+
+          {field.isCustom && (
+            <button
+              className="secondary small"
+              onClick={() => handleRemoveCustomField(field.id)}
+              disabled={disabled}
+              style={{ marginLeft: 'auto' }}
+            >
+              Remove
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const activeFieldCount = Object.values(config.fields).filter(f => f.enabled).length;
+  const totalFieldCount = Object.keys(config.fields).length;
+
+  return (
+    <div className="match-settings-panel">
+      <div className="match-settings-header" onClick={() => setExpanded(!expanded)}>
+        <h3>
+          <span>Match Settings</span>
+          <span style={{ fontSize: '0.8em', color: '#64748b', fontWeight: 'normal' }}>
+            ({activeFieldCount} of {totalFieldCount} fields active)
+          </span>
+        </h3>
+        <span className={`match-settings-toggle ${expanded ? 'expanded' : ''}`}>▼</span>
+      </div>
+
+      {expanded && (
+        <div className="match-settings-body">
+          {/* Presets */}
+          <div className="match-settings-presets">
+            <span style={{ color: '#94a3b8', marginRight: '10px', alignSelf: 'center' }}>Preset:</span>
+            {Object.values(MATCH_PRESETS).map(preset => (
+              <button
+                key={preset.id}
+                className={`preset-btn ${config.preset === preset.id ? 'active' : ''}`}
+                onClick={() => handlePresetChange(preset.id)}
+                title={preset.description}
+                disabled={disabled}
+              >
+                {preset.name}
+              </button>
+            ))}
+            {config.preset === 'custom' && (
+              <span className="preset-btn active" style={{ cursor: 'default' }}>Custom</span>
+            )}
+          </div>
+
+          {/* Primary & Identity Fields (always visible) */}
+          {['primary', 'identity', 'contact', 'personal'].map(categoryKey => {
+            const category = fieldsByCategory[categoryKey];
+            if (category.fields.length === 0) return null;
+            return (
+              <div key={categoryKey} className="match-field-section">
+                <div className="match-field-section-title">{category.title}</div>
+                {category.fields.map(renderFieldRow)}
+              </div>
+            );
+          })}
+
+          {/* Additional Fields (collapsible) */}
+          {(showAllFields || fieldsByCategory.additional.fields.some(f => config.fields[f.id]?.enabled)) && (
+            <div className="match-field-section">
+              <div className="match-field-section-title">
+                Additional Fields
+                {!showAllFields && (
+                  <button className="expand-toggle" onClick={() => setShowAllFields(true)}>
+                    Show all
+                  </button>
+                )}
+              </div>
+              {(showAllFields ? fieldsByCategory.additional.fields : fieldsByCategory.additional.fields.filter(f => config.fields[f.id]?.enabled)).map(renderFieldRow)}
+            </div>
+          )}
+
+          {!showAllFields && !fieldsByCategory.additional.fields.some(f => config.fields[f.id]?.enabled) && (
+            <button className="expand-toggle" onClick={() => setShowAllFields(true)} style={{ marginBottom: '15px' }}>
+              + Show Additional Fields (Address, City, State, Country)
+            </button>
+          )}
+
+          {/* Custom Fields */}
+          {fieldsByCategory.custom.fields.length > 0 && (
+            <div className="match-field-section">
+              <div className="match-field-section-title">Custom Fields</div>
+              {fieldsByCategory.custom.fields.map(renderFieldRow)}
+            </div>
+          )}
+
+          {/* Add Custom Field */}
+          {schema && availableCustomFields.length > 0 && (
+            <div style={{ marginTop: '15px' }}>
+              {showAddField ? (
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <select
+                    className="match-type-select"
+                    style={{ minWidth: '200px' }}
+                    onChange={(e) => e.target.value && handleAddCustomField(e.target.value)}
+                    disabled={disabled}
+                    defaultValue=""
+                  >
+                    <option value="" disabled>Select a field to add...</option>
+                    {availableCustomFields.map(fieldName => (
+                      <option key={fieldName} value={fieldName}>{fieldName}</option>
+                    ))}
+                  </select>
+                  <button className="secondary small" onClick={() => setShowAddField(false)}>Cancel</button>
+                </div>
+              ) : (
+                <button
+                  className="secondary small"
+                  onClick={() => setShowAddField(true)}
+                  disabled={disabled}
+                >
+                  + Add Custom Field
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* JSON Fields from bahr_import_flatpack_data */}
+          {fieldsByCategory.json.fields.length > 0 && (
+            <div className="match-field-section">
+              <div className="match-field-section-title" style={{ color: '#a78bfa' }}>
+                JSON Fields (from bahr_import_flatpack_data)
+              </div>
+              {fieldsByCategory.json.fields.map(renderFieldRow)}
+            </div>
+          )}
+
+          {/* Add JSON Field */}
+          {availableJsonKeys.length > 0 && (
+            <div style={{ marginTop: '15px' }}>
+              {showJsonFields ? (
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <select
+                    className="match-type-select"
+                    style={{ minWidth: '250px' }}
+                    onChange={(e) => e.target.value && handleAddJsonField(e.target.value)}
+                    disabled={disabled}
+                    defaultValue=""
+                  >
+                    <option value="" disabled>Select a JSON field key to add...</option>
+                    {availableJsonKeys.map(item => (
+                      <option key={item.key} value={item.key}>
+                        {item.key} ({item.count} records)
+                      </option>
+                    ))}
+                  </select>
+                  <button className="secondary small" onClick={() => setShowJsonFields(false)}>Cancel</button>
+                </div>
+              ) : (
+                <button
+                  className="secondary small"
+                  onClick={() => setShowJsonFields(true)}
+                  disabled={disabled}
+                  style={{ background: 'rgba(147, 51, 234, 0.2)', borderColor: '#7c3aed' }}
+                >
+                  + Add JSON Field ({availableJsonKeys.length} available)
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Footer with Re-scan button */}
+          <div className="match-settings-footer">
+            <div className="settings-info">
+              {config.preset !== 'custom'
+                ? `Using ${MATCH_PRESETS[config.preset]?.name || 'Balanced'} preset`
+                : 'Using custom configuration'}
+            </div>
+            <button
+              className="primary"
+              onClick={onRescan}
+              disabled={disabled || !allRecords || allRecords.length === 0}
+            >
+              Re-Scan with These Settings
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ============================================
 // LOGIN COMPONENT
@@ -2466,6 +3553,7 @@ function MainApp({ accessLevel, onLogout }) {
   const [apiKey, setApiKey] = useState(() => localStorage.getItem('airtable_api_key') || '');
   const [baseId, setBaseId] = useState(AIRTABLE_BASE_ID);
   const [loading, setLoading] = useState(false);
+  const [scanning, setScanning] = useState(false);
   const [logs, setLogs] = useState([]);
   const [schema, setSchema] = useState(null);
   const [allRecords, setAllRecords] = useState([]);
@@ -2482,6 +3570,25 @@ function MainApp({ accessLevel, onLogout }) {
   const [lastSelectedIndex, setLastSelectedIndex] = useState(null);
   const [showBulkMergeModal, setShowBulkMergeModal] = useState(false);
 
+  // Match configuration state with localStorage persistence
+  const [matchConfig, setMatchConfig] = useState(() => {
+    try {
+      const saved = localStorage.getItem('dedupe_match_config');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        // Merge saved config with defaults to handle any new fields
+        return {
+          ...DEFAULT_MATCH_CONFIG,
+          ...parsed,
+          fields: { ...DEFAULT_MATCH_CONFIG.fields, ...parsed.fields },
+        };
+      }
+    } catch (e) {
+      console.warn('Failed to load match config from localStorage:', e);
+    }
+    return DEFAULT_MATCH_CONFIG;
+  });
+
   const logRef = useRef(null);
   const isBahrOnly = accessLevel === 'bahr';
   const credentials = { apiKey, baseId, tableName: CLIENT_INFO_TABLE };
@@ -2489,14 +3596,56 @@ function MainApp({ accessLevel, onLogout }) {
   useEffect(() => { if (apiKey) localStorage.setItem('airtable_api_key', apiKey); }, [apiKey]);
   useEffect(() => { if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight; }, [logs]);
 
+  // Persist match config to localStorage
+  useEffect(() => {
+    localStorage.setItem('dedupe_match_config', JSON.stringify(matchConfig));
+  }, [matchConfig]);
+
   const addLog = useCallback((message, type = 'info') => {
     setLogs(prev => [...prev, { message, type, timestamp: new Date().toLocaleTimeString() }]);
   }, []);
+
+  // Re-scan existing records with current match config (no re-fetch)
+  const rescanWithConfig = useCallback(() => {
+    if (allRecords.length === 0) {
+      addLog('No records loaded. Please fetch records first.', 'error');
+      return;
+    }
+
+    setScanning(true);
+    addLog(`Re-scanning ${allRecords.length} records with updated match settings...`, 'info');
+
+    // Use setTimeout to allow UI to update before processing
+    setTimeout(() => {
+      try {
+        const dupes = findDuplicateCandidates(allRecords, (p) => {
+          if (p.current % 100 === 0) addLog(`Matching: ${p.current}/${p.total} groups`, 'info');
+        }, matchConfig);
+
+        setCandidates(dupes);
+        setSelectedIds(new Set()); // Clear selection on re-scan
+
+        const byTier = { 1: 0, 2: 0, 3: 0, 4: 0 };
+        dupes.forEach(c => byTier[c.tier.tier]++);
+        addLog(`Found ${dupes.length} duplicate pairs`, dupes.length > 0 ? 'warning' : 'success');
+        addLog(`  Tier 1 (Definitive): ${byTier[1]}`, 'info');
+        addLog(`  Tier 2 (Strong): ${byTier[2]}`, 'info');
+        addLog(`  Tier 3 (Possible): ${byTier[3]}`, 'info');
+        addLog(`  Tier 4 (Conflicts): ${byTier[4]}`, byTier[4] > 0 ? 'error' : 'info');
+      } catch (err) {
+        addLog(`Error during re-scan: ${err.message}`, 'error');
+      } finally {
+        setScanning(false);
+      }
+    }, 50);
+  }, [allRecords, matchConfig, addLog]);
 
   const fetchAndScan = async () => {
     if (!apiKey) { addLog('Please enter API key', 'error'); return; }
     setLoading(true);
     setLogs([]);
+    setAllRecords([]); // Clear records while fetching
+    setCandidates([]); // Clear candidates while fetching
     try {
       const client = new AirtableClient(apiKey, baseId);
 
@@ -2510,16 +3659,27 @@ function MainApp({ accessLevel, onLogout }) {
 
       // Include Created field for filtering (it's a computed field)
       const fieldsToFetch = [...tableSchema.writableFields, 'dedupe_history', 'Created'];
-      const records = await client.getAllRecords(CLIENT_INFO_TABLE, fieldsToFetch, filter,
-        (p) => addLog(`Page ${p.page}: ${p.total} records`, 'info'));
 
+      // Stream records as they load - update state incrementally
+      let allFetchedRecords = [];
+      const records = await client.getAllRecords(CLIENT_INFO_TABLE, fieldsToFetch, filter,
+        (p) => {
+          addLog(`Page ${p.page}: ${p.total} records loaded`, 'info');
+          // Update allRecords incrementally to show progress
+          if (p.records) {
+            allFetchedRecords = [...allFetchedRecords, ...p.records];
+            setAllRecords([...allFetchedRecords]);
+          }
+        });
+
+      // Final update with all records
       setAllRecords(records);
-      addLog(`Fetched ${records.length} records`, 'success');
+      addLog(`Fetched ${records.length} records total`, 'success');
 
       addLog('Analyzing for duplicates...', 'info');
       const dupes = findDuplicateCandidates(records, (p) => {
         if (p.current % 100 === 0) addLog(`Matching: ${p.current}/${p.total} groups`, 'info');
-      });
+      }, matchConfig);
       setCandidates(dupes);
 
       const byTier = { 1: 0, 2: 0, 3: 0, 4: 0 };
@@ -2695,7 +3855,8 @@ function MainApp({ accessLevel, onLogout }) {
             </div>
           </div>
 
-          {candidates.length > 0 && (
+          {/* Show stats when records are loaded */}
+          {allRecords.length > 0 && (
             <div className="stats-grid">
               <div className="stat-card"><div className="number">{stats.total}</div><div className="label">Total Records</div></div>
               <div className="stat-card tier1"><div className="number">{stats.byTier[1]}</div><div className="label">Tier 1 Definitive</div></div>
@@ -2703,6 +3864,18 @@ function MainApp({ accessLevel, onLogout }) {
               <div className="stat-card tier3"><div className="number">{stats.byTier[3]}</div><div className="label">Tier 3 Possible</div></div>
               <div className="stat-card tier4"><div className="number">{stats.byTier[4]}</div><div className="label">Tier 4 Conflicts</div></div>
             </div>
+          )}
+
+          {/* Match Settings Panel - show after records are loaded */}
+          {allRecords.length > 0 && (
+            <MatchSettingsPanel
+              config={matchConfig}
+              onChange={setMatchConfig}
+              onRescan={rescanWithConfig}
+              allRecords={allRecords}
+              schema={schema}
+              disabled={loading || scanning}
+            />
           )}
 
           {candidates.length > 0 && (
