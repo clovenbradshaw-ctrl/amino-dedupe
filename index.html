@@ -746,6 +746,7 @@ const TABLE_CONFIGS = {
         category: 'primary',
         description: 'Compares Name field and clientName from Matter_Flatpack',
         airtableFields: ['Name', 'Client Name', 'Defendant Name'],
+        nameFields: { full: 'Name', alt: ['Client Name', 'Defendant Name'] },
         flatpackFields: ['clientName'],
         defaultEnabled: true,
         defaultType: 'fuzzy',
@@ -859,7 +860,7 @@ const EXCLUDE_FROM_MERGE = ['Box Legacy ID'];
 // MATCH CONFIGURATION
 // ============================================
 
-// Field definitions for match configuration
+// Field definitions for match configuration (Client Info table)
 const MATCH_FIELD_DEFINITIONS = {
   // Primary Name Matching
   name: {
@@ -867,6 +868,8 @@ const MATCH_FIELD_DEFINITIONS = {
     label: 'Name',
     category: 'primary',
     description: 'Compares First Name + Family Name using fuzzy matching, nicknames, and exact match',
+    airtableFields: ['First Name', 'Family Name', 'Client Name'],
+    nameFields: { first: 'First Name', last: 'Family Name', full: 'Client Name' },
     defaultEnabled: true,
     defaultType: 'fuzzy',
     defaultThreshold: 85,
@@ -879,6 +882,7 @@ const MATCH_FIELD_DEFINITIONS = {
     label: 'PPID',
     category: 'identity',
     description: 'Primary Person ID - exact match gives high confidence',
+    airtableFields: ['PPID'],
     defaultEnabled: true,
     defaultType: 'exact',
     defaultThreshold: 100,
@@ -890,6 +894,7 @@ const MATCH_FIELD_DEFINITIONS = {
     label: 'A#',
     category: 'identity',
     description: 'Alien Number - exact match gives high confidence',
+    airtableFields: ['A#'],
     defaultEnabled: true,
     defaultType: 'exact',
     defaultThreshold: 100,
@@ -901,6 +906,7 @@ const MATCH_FIELD_DEFINITIONS = {
     label: 'Clio Contact ID',
     category: 'identity',
     description: 'When blocking: different Clio IDs = definitely not same person. When exact: matching IDs = strong evidence.',
+    airtableFields: ['clio_contact_id'],
     defaultEnabled: false,
     defaultType: 'blocking',
     defaultThreshold: 100,
@@ -914,6 +920,7 @@ const MATCH_FIELD_DEFINITIONS = {
     label: 'Phone Number',
     category: 'contact',
     description: 'Phone numbers are normalized to 10 digits before comparison',
+    airtableFields: ['Phone Number'],
     defaultEnabled: true,
     defaultType: 'normalized',
     defaultThreshold: 100,
@@ -925,6 +932,7 @@ const MATCH_FIELD_DEFINITIONS = {
     label: 'Email',
     category: 'contact',
     description: 'Email comparison (ignores null@blank placeholder emails)',
+    airtableFields: ['Client Email'],
     defaultEnabled: true,
     defaultType: 'exact',
     defaultThreshold: 100,
@@ -936,6 +944,7 @@ const MATCH_FIELD_DEFINITIONS = {
     label: 'Date of Birth',
     category: 'personal',
     description: 'Exact date match - strong corroborating evidence',
+    airtableFields: ['DOB'],
     defaultEnabled: true,
     defaultType: 'exact',
     defaultThreshold: 100,
@@ -948,6 +957,7 @@ const MATCH_FIELD_DEFINITIONS = {
     label: 'Address',
     category: 'additional',
     description: 'Street address comparison',
+    airtableFields: ['Address Line 1', 'Address'],
     defaultEnabled: false,
     defaultType: 'fuzzy',
     defaultThreshold: 80,
@@ -958,6 +968,7 @@ const MATCH_FIELD_DEFINITIONS = {
     label: 'City',
     category: 'additional',
     description: 'City name comparison',
+    airtableFields: ['City'],
     defaultEnabled: false,
     defaultType: 'exact',
     defaultThreshold: 100,
@@ -968,6 +979,7 @@ const MATCH_FIELD_DEFINITIONS = {
     label: 'State',
     category: 'additional',
     description: 'State comparison',
+    airtableFields: ['State'],
     defaultEnabled: false,
     defaultType: 'exact',
     defaultThreshold: 100,
@@ -978,6 +990,7 @@ const MATCH_FIELD_DEFINITIONS = {
     label: 'Country',
     category: 'additional',
     description: 'Country comparison',
+    airtableFields: ['Country'],
     defaultEnabled: false,
     defaultType: 'exact',
     defaultThreshold: 100,
@@ -1071,6 +1084,89 @@ const DEFAULT_MATCH_CONFIG = {
   preset: 'balanced',
   fields: buildDefaultMatchConfig(),
   minConfidenceForMatch: 70,
+};
+
+// Get the field definitions for a specific table
+const getFieldDefinitions = (tableConfig) => {
+  if (!tableConfig || tableConfig.useMainMatchFields) {
+    return MATCH_FIELD_DEFINITIONS;
+  }
+  return tableConfig.matchFieldDefinitions || MATCH_FIELD_DEFINITIONS;
+};
+
+// Build default match config for a specific table
+const buildTableMatchConfig = (tableConfig) => {
+  const fieldDefs = getFieldDefinitions(tableConfig);
+  const config = {};
+  Object.values(fieldDefs).forEach(field => {
+    config[field.id] = {
+      enabled: field.defaultEnabled,
+      type: field.defaultType,
+      threshold: field.defaultThreshold,
+    };
+  });
+  return {
+    preset: 'balanced',
+    fields: config,
+    minConfidenceForMatch: 70,
+  };
+};
+
+// Get field value from record using table-specific field names
+const getFieldValue = (record, fieldDef) => {
+  if (!fieldDef || !record) return null;
+  const f = record.fields || {};
+
+  // Try airtableFields first
+  if (fieldDef.airtableFields) {
+    for (const fieldName of fieldDef.airtableFields) {
+      const val = f[fieldName];
+      if (val !== undefined && val !== null && val !== '') {
+        return val;
+      }
+    }
+  }
+
+  return null;
+};
+
+// Get name value for grouping/matching, handling different table schemas
+const getRecordName = (record, fieldDefs) => {
+  if (!record) return '';
+  const f = record.fields || {};
+  const nameDef = fieldDefs?.name;
+
+  if (nameDef?.nameFields) {
+    const nf = nameDef.nameFields;
+    // For tables with separate first/last name fields
+    if (nf.first && nf.last) {
+      const firstName = f[nf.first];
+      const lastName = f[nf.last];
+      if (firstName || lastName) {
+        return [firstName, lastName].filter(Boolean).join(' ');
+      }
+    }
+    // For tables with full name field
+    if (nf.full && f[nf.full]) {
+      return f[nf.full];
+    }
+    // Try alt fields
+    if (nf.alt) {
+      for (const altField of nf.alt) {
+        if (f[altField]) return f[altField];
+      }
+    }
+  }
+
+  // Fallback: try all airtableFields from name definition
+  if (nameDef?.airtableFields) {
+    for (const fieldName of nameDef.airtableFields) {
+      if (f[fieldName]) return f[fieldName];
+    }
+  }
+
+  // Final fallback for legacy behavior
+  return f['Client Name'] || f['Name'] || '';
 };
 
 // Nickname mappings for name matching
@@ -1651,31 +1747,115 @@ class AirtableClient {
 // MATCHING ENGINE
 // ============================================
 
-const scoreRecordQuality = (record) => {
+const scoreRecordQuality = (record, fieldDefs = MATCH_FIELD_DEFINITIONS) => {
   const f = record.fields || {};
   let score = 0;
-  if (f['A#']?.trim()) score += 50;
-  if (f['DOB']) score += 30;
-  if (f['clio_contact_id']) score += 25;
-  if (f['PPID']) score += 20;
+
+  // Use table-specific field definitions for scoring
+  const idFields = ['ppid', 'aNumber', 'clioId', 'matterId'];
+  const contactFields = ['phone', 'email'];
+
+  // Score ID fields (high value)
+  idFields.forEach(fieldId => {
+    const def = fieldDefs[fieldId];
+    if (def?.airtableFields) {
+      for (const fieldName of def.airtableFields) {
+        if (f[fieldName]?.toString().trim()) {
+          score += fieldId === 'aNumber' ? 50 : fieldId === 'clioId' ? 25 : 20;
+          break;
+        }
+      }
+    }
+  });
+
+  // Score contact fields (medium value)
+  contactFields.forEach(fieldId => {
+    const def = fieldDefs[fieldId];
+    if (def?.airtableFields) {
+      for (const fieldName of def.airtableFields) {
+        const val = f[fieldName]?.toString().trim();
+        if (val && !val.includes('null@blank')) {
+          score += 15;
+          break;
+        }
+      }
+    }
+  });
+
+  // Score DOB if available
+  const dobDef = fieldDefs.dob;
+  if (dobDef?.airtableFields) {
+    for (const fieldName of dobDef.airtableFields) {
+      if (f[fieldName]) {
+        score += 30;
+        break;
+      }
+    }
+  }
+
+  // Score address fields
+  const addressDef = fieldDefs.address;
+  if (addressDef?.airtableFields) {
+    for (const fieldName of addressDef.airtableFields) {
+      if (f[fieldName]) {
+        score += 10;
+        break;
+      }
+    }
+  }
+
+  // Table-specific bonus scores (Client Info relationships)
   if (f['Box_Folder_ID']) score += 40;
-  if (f['Phone Number']?.trim()) score += 15;
-  if (f['Client Email']?.trim() && !f['Client Email'].includes('null@blank')) score += 15;
-  if (f['Address Line 1'] || f['Address']) score += 10;
   score += (f['Case Master View'] || []).length * 100;
   score += (f['Events'] || []).length * 50;
   score += (f['Relationships'] || []).length * 30;
   score += (f['Matters'] || []).length * 80;
   score += (f['Client Notes'] || []).length * 20;
-  if (f['First Name']) score += 5;
-  if (f['Family Name']) score += 5;
+
+  // Score name completeness
+  const nameDef = fieldDefs.name;
+  if (nameDef?.nameFields) {
+    if (nameDef.nameFields.first && f[nameDef.nameFields.first]) score += 5;
+    if (nameDef.nameFields.last && f[nameDef.nameFields.last]) score += 5;
+  }
+
   return score;
 };
 
-const getDisplayName = (record) => {
+const getDisplayName = (record, fieldDefs = MATCH_FIELD_DEFINITIONS) => {
   const f = record.fields || {};
-  return f['Full_Name_Normal_Pretty'] || f['Client Name'] ||
-    [f['First Name'], f['Middle Name'], f['Family Name']].filter(Boolean).join(' ') || record.id;
+
+  // Try Full_Name_Normal_Pretty first (Client Info specific)
+  if (f['Full_Name_Normal_Pretty']) return f['Full_Name_Normal_Pretty'];
+
+  // Use table-specific name fields
+  const nameDef = fieldDefs?.name;
+  if (nameDef?.nameFields) {
+    const nf = nameDef.nameFields;
+    // Try full name field
+    if (nf.full && f[nf.full]) return f[nf.full];
+    // Try first/last name combination
+    if (nf.first || nf.last) {
+      const parts = [f[nf.first], f['Middle Name'], f[nf.last]].filter(Boolean);
+      if (parts.length > 0) return parts.join(' ');
+    }
+    // Try alt fields
+    if (nf.alt) {
+      for (const altField of nf.alt) {
+        if (f[altField]) return f[altField];
+      }
+    }
+  }
+
+  // Fallback: try all airtableFields from name definition
+  if (nameDef?.airtableFields) {
+    for (const fieldName of nameDef.airtableFields) {
+      if (f[fieldName]) return f[fieldName];
+    }
+  }
+
+  // Final fallbacks
+  return f['Client Name'] || f['Name'] || record.id;
 };
 
 // Helper function to compare field values based on match type and threshold
@@ -1712,61 +1892,80 @@ const compareFieldValues = (valA, valB, matchType, threshold) => {
   return { match: false, score: 0 };
 };
 
-const scoreMatch = (recordA, recordB, matchConfig = DEFAULT_MATCH_CONFIG) => {
+const scoreMatch = (recordA, recordB, matchConfig = DEFAULT_MATCH_CONFIG, fieldDefs = MATCH_FIELD_DEFINITIONS) => {
   const fa = recordA.fields || {}, fb = recordB.fields || {};
   const reasons = [], conflicts = [];
   let confidence = 0;
   let hasIdMatch = false;
   const fieldConfig = matchConfig.fields || {};
 
+  // Helper to get first non-empty value from a list of field names
+  const getFirst = (fields, source) => {
+    if (!fields) return null;
+    for (const f of fields) {
+      const val = source[f];
+      if (val !== undefined && val !== null && val !== '') return val;
+    }
+    return null;
+  };
+
   // Handle clio_contact_id field (can be blocking or exact match)
   const clioConfig = fieldConfig.clioId || { enabled: false, type: 'blocking' };
   if (clioConfig.enabled) {
-    const clioA = fa['clio_contact_id'], clioB = fb['clio_contact_id'];
+    const clioDef = fieldDefs.clioId;
+    const clioA = getFirst(clioDef?.airtableFields, fa);
+    const clioB = getFirst(clioDef?.airtableFields, fb);
     if (clioA && clioB && clioA !== clioB) {
       // Only block if type is 'blocking', otherwise treat as conflict
       if (clioConfig.type === 'blocking') {
         return null; // Definitively not a match
       } else {
-        conflicts.push(`clio_contact_id: "${clioA}" vs "${clioB}"`);
+        conflicts.push(`Clio ID: "${clioA}" vs "${clioB}"`);
       }
     }
     if (clioA && clioB && clioA === clioB) {
-      reasons.push('clio_contact_id exact');
+      reasons.push('Clio ID exact');
       hasIdMatch = true;
     }
   }
 
-  // Check for ID conflicts/matches
-  const ppidConfig = fieldConfig.ppid || { enabled: true, type: 'exact' };
-  const aNumConfig = fieldConfig.aNumber || { enabled: true, type: 'exact' };
+  // Check for ID conflicts/matches using table-specific field definitions
+  const checkIdFieldDef = (defId, config) => {
+    if (!config || !config.enabled) return;
+    const def = fieldDefs[defId];
+    if (!def?.airtableFields) return;
 
-  const checkIdField = (airtableField, configKey, config) => {
-    if (!config.enabled) return;
-    const valA = fa[airtableField], valB = fb[airtableField];
+    const valA = getFirst(def.airtableFields, fa);
+    const valB = getFirst(def.airtableFields, fb);
     if (valA && valB) {
+      const label = def.label || defId;
       if (valA === valB) {
-        reasons.push(`${airtableField} exact`);
+        reasons.push(`${label} exact`);
         hasIdMatch = true;
       } else {
-        conflicts.push(`${airtableField}: "${valA}" vs "${valB}"`);
+        conflicts.push(`${label}: "${valA}" vs "${valB}"`);
       }
     }
   };
 
-  checkIdField('PPID', 'ppid', ppidConfig);
-  checkIdField('A#', 'aNumber', aNumConfig);
+  const ppidConfig = fieldConfig.ppid || { enabled: true, type: 'exact' };
+  const aNumConfig = fieldConfig.aNumber || { enabled: true, type: 'exact' };
+  const matterIdConfig = fieldConfig.matterId || { enabled: false, type: 'exact' };
+
+  checkIdFieldDef('ppid', ppidConfig);
+  checkIdFieldDef('aNumber', aNumConfig);
+  checkIdFieldDef('matterId', matterIdConfig);
 
   // Return Tier 4 (Conflicts) if there are ID conflicts
   if (conflicts.length > 0) {
     return { tier: MATCH_TIERS.TIER4, confidence: 50, reasons, conflicts, isConflict: true };
   }
 
-  // Name matching
+  // Name matching using table-specific name fields
   const nameConfig = fieldConfig.name || { enabled: true, type: 'fuzzy', threshold: 85 };
   if (nameConfig.enabled) {
-    const nameA = [fa['First Name'], fa['Family Name']].filter(Boolean).join(' ') || fa['Client Name'];
-    const nameB = [fb['First Name'], fb['Family Name']].filter(Boolean).join(' ') || fb['Client Name'];
+    const nameA = getRecordName(recordA, fieldDefs);
+    const nameB = getRecordName(recordB, fieldDefs);
     if (nameA && nameB) {
       const threshold = nameConfig.threshold || 85;
       const nameMatch = areNamesRelated(nameA, nameB, threshold);
@@ -1790,15 +1989,13 @@ const scoreMatch = (recordA, recordB, matchConfig = DEFAULT_MATCH_CONFIG) => {
   // Corroborating fields boost confidence
   let corroboration = 0;
 
-  // Phone matching
+  // Phone matching using table-specific field
   const phoneConfig = fieldConfig.phone || { enabled: true, type: 'normalized', threshold: 100 };
   if (phoneConfig.enabled) {
-    const phoneResult = compareFieldValues(
-      fa['Phone Number'],
-      fb['Phone Number'],
-      phoneConfig.type,
-      phoneConfig.threshold
-    );
+    const phoneDef = fieldDefs.phone;
+    const phoneA = getFirst(phoneDef?.airtableFields, fa);
+    const phoneB = getFirst(phoneDef?.airtableFields, fb);
+    const phoneResult = compareFieldValues(phoneA, phoneB, phoneConfig.type, phoneConfig.threshold);
     if (phoneResult.match) {
       reasons.push(`Phone ${phoneResult.score}%`);
       corroboration++;
@@ -1806,19 +2003,25 @@ const scoreMatch = (recordA, recordB, matchConfig = DEFAULT_MATCH_CONFIG) => {
     }
   }
 
-  // DOB matching
+  // DOB matching using table-specific field
   const dobConfig = fieldConfig.dob || { enabled: true, type: 'exact' };
-  if (dobConfig.enabled && fa['DOB'] && fb['DOB'] && fa['DOB'] === fb['DOB']) {
-    reasons.push('DOB exact');
-    corroboration++;
-    confidence = Math.min(100, confidence + 15);
+  if (dobConfig.enabled) {
+    const dobDef = fieldDefs.dob;
+    const dobA = getFirst(dobDef?.airtableFields, fa);
+    const dobB = getFirst(dobDef?.airtableFields, fb);
+    if (dobA && dobB && dobA === dobB) {
+      reasons.push('DOB exact');
+      corroboration++;
+      confidence = Math.min(100, confidence + 15);
+    }
   }
 
-  // Email matching
+  // Email matching using table-specific field
   const emailConfig = fieldConfig.email || { enabled: true, type: 'exact', threshold: 100 };
   if (emailConfig.enabled) {
-    const emailA = (fa['Client Email'] || '').toLowerCase();
-    const emailB = (fb['Client Email'] || '').toLowerCase();
+    const emailDef = fieldDefs.email;
+    const emailA = (getFirst(emailDef?.airtableFields, fa) || '').toLowerCase();
+    const emailB = (getFirst(emailDef?.airtableFields, fb) || '').toLowerCase();
     if (emailA && emailB && !emailA.includes('null@blank') && !emailB.includes('null@blank')) {
       const emailResult = compareFieldValues(emailA, emailB, emailConfig.type, emailConfig.threshold);
       if (emailResult.match) {
@@ -1829,27 +2032,28 @@ const scoreMatch = (recordA, recordB, matchConfig = DEFAULT_MATCH_CONFIG) => {
     }
   }
 
-  // Additional standard fields (address, city, state, country)
-  const additionalFields = [
-    { configKey: 'address', airtableFields: ['Address Line 1', 'Address'], label: 'Address', boost: 5 },
-    { configKey: 'city', airtableFields: ['City'], label: 'City', boost: 5 },
-    { configKey: 'state', airtableFields: ['State'], label: 'State', boost: 3 },
-    { configKey: 'country', airtableFields: ['Country'], label: 'Country', boost: 3 },
+  // Additional standard fields (address, city, state, country) - use table-specific definitions
+  const additionalFieldIds = [
+    { configKey: 'address', boost: 5 },
+    { configKey: 'city', boost: 5 },
+    { configKey: 'state', boost: 3 },
+    { configKey: 'country', boost: 3 },
   ];
 
-  additionalFields.forEach(({ configKey, airtableFields, label, boost }) => {
+  additionalFieldIds.forEach(({ configKey, boost }) => {
     const config = fieldConfig[configKey];
     if (!config || !config.enabled) return;
 
-    let valA, valB;
-    for (const fieldName of airtableFields) {
-      if (!valA && fa[fieldName]) valA = fa[fieldName];
-      if (!valB && fb[fieldName]) valB = fb[fieldName];
-    }
+    const def = fieldDefs[configKey];
+    if (!def?.airtableFields) return;
+
+    const valA = getFirst(def.airtableFields, fa);
+    const valB = getFirst(def.airtableFields, fb);
 
     if (valA && valB) {
       const result = compareFieldValues(valA, valB, config.type, config.threshold);
       if (result.match) {
+        const label = def.label || configKey;
         reasons.push(`${label} ${result.score}%`);
         corroboration++;
         confidence = Math.min(100, confidence + boost);
@@ -1913,16 +2117,16 @@ const scoreMatch = (recordA, recordB, matchConfig = DEFAULT_MATCH_CONFIG) => {
   return { tier, confidence: Math.round(Math.max(confidence, minConfidence)), reasons, conflicts, isConflict: false };
 };
 
-const findDuplicateCandidates = (records, onProgress, matchConfig = DEFAULT_MATCH_CONFIG) => {
+const findDuplicateCandidates = (records, onProgress, matchConfig = DEFAULT_MATCH_CONFIG, fieldDefs = MATCH_FIELD_DEFINITIONS) => {
   const candidates = [];
   const processed = new Set();
   const minConfidence = matchConfig.minConfidenceForMatch || 70;
 
-  // Group by normalized name for efficiency
+  // Group by normalized name for efficiency - use table-specific name fields
   const groups = new Map();
   records.forEach((record, idx) => {
-    const f = record.fields || {};
-    const key = normalizeName([f['First Name'], f['Family Name']].filter(Boolean).join(' ') || f['Client Name'] || '');
+    const name = getRecordName(record, fieldDefs);
+    const key = normalizeName(name);
     if (!key) return;
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push({ record, idx });
@@ -1939,17 +2143,17 @@ const findDuplicateCandidates = (records, onProgress, matchConfig = DEFAULT_MATC
         if (processed.has(pairKey)) continue;
         processed.add(pairKey);
 
-        const match = scoreMatch(group[i].record, group[j].record, matchConfig);
+        const match = scoreMatch(group[i].record, group[j].record, matchConfig, fieldDefs);
         if (match && (match.confidence >= minConfidence || match.isConflict)) {
-          const scoreA = scoreRecordQuality(group[i].record);
-          const scoreB = scoreRecordQuality(group[j].record);
+          const scoreA = scoreRecordQuality(group[i].record, fieldDefs);
+          const scoreB = scoreRecordQuality(group[j].record, fieldDefs);
           const [survivor, merged] = scoreA >= scoreB ? [group[i], group[j]] : [group[j], group[i]];
 
           candidates.push({
             id: `match_${candidates.length}`,
             ...match,
-            survivor: { record: survivor.record, score: Math.max(scoreA, scoreB), name: getDisplayName(survivor.record) },
-            merged: { record: merged.record, score: Math.min(scoreA, scoreB), name: getDisplayName(merged.record) },
+            survivor: { record: survivor.record, score: Math.max(scoreA, scoreB), name: getDisplayName(survivor.record, fieldDefs) },
+            merged: { record: merged.record, score: Math.min(scoreA, scoreB), name: getDisplayName(merged.record, fieldDefs) },
           });
         }
       }
@@ -2062,7 +2266,7 @@ const buildMergeHistoryEntry = (survivor, merged, fieldDecisions, matchInfo, not
 // MATCH SETTINGS PANEL COMPONENT
 // ============================================
 
-function MatchSettingsPanel({ config, onChange, onRescan, allRecords, schema, disabled }) {
+function MatchSettingsPanel({ config, onChange, onRescan, allRecords, schema, disabled, fieldDefs = MATCH_FIELD_DEFINITIONS }) {
   const [expanded, setExpanded] = useState(false);
   const [showAllFields, setShowAllFields] = useState(false);
   const [showAddField, setShowAddField] = useState(false);
@@ -2111,24 +2315,17 @@ function MatchSettingsPanel({ config, onChange, onRescan, allRecords, schema, di
   // Get available fields from schema that can be added as custom match fields
   const availableCustomFields = useMemo(() => {
     if (!schema) return [];
-    const existingFieldIds = Object.keys(MATCH_FIELD_DEFINITIONS);
-    const customFieldIds = Object.keys(config.fields).filter(id => !MATCH_FIELD_DEFINITIONS[id]);
+    const existingFieldIds = Object.keys(fieldDefs);
+    const customFieldIds = Object.keys(config.fields).filter(id => !fieldDefs[id]);
     const usedIds = [...existingFieldIds, ...customFieldIds];
 
-    // Map of field IDs to their Airtable field names
-    const fieldIdToName = {
-      name: ['First Name', 'Family Name', 'Client Name'],
-      ppid: ['PPID'],
-      aNumber: ['A#'],
-      clioId: ['clio_contact_id'],
-      phone: ['Phone Number'],
-      email: ['Client Email'],
-      dob: ['DOB'],
-      address: ['Address Line 1', 'Address'],
-      city: ['City'],
-      state: ['State'],
-      country: ['Country'],
-    };
+    // Build field ID to Airtable field name mapping from fieldDefs
+    const fieldIdToName = {};
+    Object.entries(fieldDefs).forEach(([id, def]) => {
+      if (def.airtableFields) {
+        fieldIdToName[id] = def.airtableFields;
+      }
+    });
 
     // Get all used field identifiers (both Airtable names and JSON keys)
     const usedFieldNames = new Set();
@@ -2160,7 +2357,7 @@ function MatchSettingsPanel({ config, onChange, onRescan, allRecords, schema, di
                !lower.includes('legacy');
       })
       .sort();
-  }, [schema, config.fields]);
+  }, [schema, config.fields, fieldDefs]);
 
   // Get available JSON keys not already added
   const availableJsonKeys = useMemo(() => {
@@ -2179,7 +2376,7 @@ function MatchSettingsPanel({ config, onChange, onRescan, allRecords, schema, di
       // Keep any custom fields that were added
       const customFields = {};
       Object.entries(config.fields).forEach(([id, fieldConfig]) => {
-        if (!MATCH_FIELD_DEFINITIONS[id]) {
+        if (!fieldDefs[id]) {
           customFields[id] = fieldConfig;
         }
       });
@@ -2262,8 +2459,8 @@ function MatchSettingsPanel({ config, onChange, onRescan, allRecords, schema, di
       json: { title: 'JSON Fields (from bahr_import_flatpack_data)', fields: [] },
     };
 
-    // Add predefined fields
-    Object.entries(MATCH_FIELD_DEFINITIONS).forEach(([id, def]) => {
+    // Add predefined fields from table-specific definitions
+    Object.entries(fieldDefs).forEach(([id, def]) => {
       const fieldConfig = config.fields[id] || { enabled: def.defaultEnabled, type: def.defaultType, threshold: def.defaultThreshold };
       categories[def.category].fields.push({ ...def, ...fieldConfig, id });
     });
@@ -3114,6 +3311,9 @@ function HistoryViewer({ credentials, addLog }) {
   const [unmerging, setUnmerging] = useState(false);
   const [confirmUnmerge, setConfirmUnmerge] = useState(null); // { eventIdx, mergedRecordIdx }
 
+  // Get table-specific field definitions for display
+  const fieldDefs = getFieldDefinitions(credentials.tableConfig);
+
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
     setSearching(true);
@@ -3288,7 +3488,7 @@ function HistoryViewer({ credentials, addLog }) {
                     justifyContent: 'space-between'
                   }}>
                   <div>
-                    <div style={{ fontWeight: '500', marginBottom: '4px' }}>{record.fields['Client Name'] || getDisplayName(record)}</div>
+                    <div style={{ fontWeight: '500', marginBottom: '4px' }}>{getDisplayName(record, fieldDefs)}</div>
                     <div style={{ fontSize: '0.8em', color: '#94a3b8' }}>
                       {record.fields.PPID && <span style={{ marginRight: '10px' }}>PPID: {record.fields.PPID}</span>}
                       <span style={{ opacity: 0.7 }}>ID: {record.id}</span>
@@ -3323,7 +3523,7 @@ function HistoryViewer({ credentials, addLog }) {
             marginBottom: '20px'
           }}>
             <h3 style={{ margin: 0, color: '#a5b4fc' }}>
-              {selectedRecord.fields['Client Name'] || getDisplayName(selectedRecord)}
+              {getDisplayName(selectedRecord, fieldDefs)}
             </h3>
             <div style={{ fontSize: '0.85em', color: '#94a3b8', marginTop: '5px' }}>
               {history.length === 0
@@ -3964,6 +4164,10 @@ function MainApp({ accessLevel, tableConfig, selectedTable, onSelectTable, onLog
   // Table-specific values
   const tableName = tableConfig.tableId;
   const hasBahrFilter = tableConfig.hasBahrFilter;
+  const fieldDefs = getFieldDefinitions(tableConfig);
+
+  // Build table-specific default config
+  const tableDefaultConfig = useMemo(() => buildTableMatchConfig(tableConfig), [tableConfig]);
 
   // Match configuration state with localStorage persistence (per-table)
   const configStorageKey = `dedupe_match_config_${tableConfig.id}`;
@@ -3972,17 +4176,17 @@ function MainApp({ accessLevel, tableConfig, selectedTable, onSelectTable, onLog
       const saved = localStorage.getItem(configStorageKey);
       if (saved) {
         const parsed = JSON.parse(saved);
-        // Merge saved config with defaults to handle any new fields
+        // Merge saved config with table-specific defaults to handle any new fields
         return {
-          ...DEFAULT_MATCH_CONFIG,
+          ...tableDefaultConfig,
           ...parsed,
-          fields: { ...DEFAULT_MATCH_CONFIG.fields, ...parsed.fields },
+          fields: { ...tableDefaultConfig.fields, ...parsed.fields },
         };
       }
     } catch (e) {
       console.warn('Failed to load match config from localStorage:', e);
     }
-    return DEFAULT_MATCH_CONFIG;
+    return tableDefaultConfig;
   });
 
   const logRef = useRef(null);
@@ -4004,18 +4208,18 @@ function MainApp({ accessLevel, tableConfig, selectedTable, onSelectTable, onLog
       if (saved) {
         const parsed = JSON.parse(saved);
         setMatchConfig({
-          ...DEFAULT_MATCH_CONFIG,
+          ...tableDefaultConfig,
           ...parsed,
-          fields: { ...DEFAULT_MATCH_CONFIG.fields, ...parsed.fields },
+          fields: { ...tableDefaultConfig.fields, ...parsed.fields },
         });
       } else {
-        setMatchConfig(DEFAULT_MATCH_CONFIG);
+        setMatchConfig(tableDefaultConfig);
       }
     } catch (e) {
       console.warn('Failed to load match config from localStorage:', e);
-      setMatchConfig(DEFAULT_MATCH_CONFIG);
+      setMatchConfig(tableDefaultConfig);
     }
-  }, [configStorageKey]);
+  }, [configStorageKey, tableDefaultConfig]);
 
   const addLog = useCallback((message, type = 'info') => {
     setLogs(prev => [...prev, { message, type, timestamp: new Date().toLocaleTimeString() }]);
@@ -4036,7 +4240,7 @@ function MainApp({ accessLevel, tableConfig, selectedTable, onSelectTable, onLog
       try {
         const dupes = findDuplicateCandidates(allRecords, (p) => {
           if (p.current % 100 === 0) addLog(`Matching: ${p.current}/${p.total} groups`, 'info');
-        }, matchConfig);
+        }, matchConfig, fieldDefs);
 
         setCandidates(dupes);
         setSelectedIds(new Set()); // Clear selection on re-scan
@@ -4054,7 +4258,7 @@ function MainApp({ accessLevel, tableConfig, selectedTable, onSelectTable, onLog
         setScanning(false);
       }
     }, 50);
-  }, [allRecords, matchConfig, addLog]);
+  }, [allRecords, matchConfig, fieldDefs, addLog]);
 
   const fetchAndScan = async () => {
     if (!apiKey) { addLog('Please enter API key', 'error'); return; }
@@ -4098,7 +4302,7 @@ function MainApp({ accessLevel, tableConfig, selectedTable, onSelectTable, onLog
       addLog('Analyzing for duplicates...', 'info');
       const dupes = findDuplicateCandidates(records, (p) => {
         if (p.current % 100 === 0) addLog(`Matching: ${p.current}/${p.total} groups`, 'info');
-      }, matchConfig);
+      }, matchConfig, fieldDefs);
       setCandidates(dupes);
 
       const byTier = { 1: 0, 2: 0, 3: 0, 4: 0 };
@@ -4389,6 +4593,7 @@ function MainApp({ accessLevel, tableConfig, selectedTable, onSelectTable, onLog
               allRecords={allRecords}
               schema={schema}
               disabled={loading || scanning}
+              fieldDefs={fieldDefs}
             />
           )}
 
