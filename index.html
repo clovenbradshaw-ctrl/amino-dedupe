@@ -3925,22 +3925,23 @@ function App() {
   // Step 1: Login
   if (!accessLevel) return <LoginScreen onLogin={handleLogin} />;
 
-  // Step 2: Table Selection
-  if (!selectedTable) return <TableSelector onSelectTable={handleSelectTable} onBack={handleLogout} />;
-
-  // Step 3: Main App with selected table
-  const tableConfig = TABLE_CONFIGS[selectedTable];
+  // Step 2: Main App with table selection integrated
+  // Default to client_info if no table selected
+  const currentTable = selectedTable || 'client_info';
+  const tableConfig = TABLE_CONFIGS[currentTable];
   return (
     <MainApp
       accessLevel={accessLevel}
       tableConfig={tableConfig}
+      selectedTable={currentTable}
+      onSelectTable={handleSelectTable}
       onLogout={handleLogout}
       onSwitchTable={handleBackToTableSelect}
     />
   );
 }
 
-function MainApp({ accessLevel, tableConfig, onLogout, onSwitchTable }) {
+function MainApp({ accessLevel, tableConfig, selectedTable, onSelectTable, onLogout, onSwitchTable }) {
   const [apiKey, setApiKey] = useState(() => localStorage.getItem('airtable_api_key') || '');
   const [baseId, setBaseId] = useState(AIRTABLE_BASE_ID);
   const [loading, setLoading] = useState(false);
@@ -3996,6 +3997,26 @@ function MainApp({ accessLevel, tableConfig, onLogout, onSwitchTable }) {
   useEffect(() => {
     localStorage.setItem(configStorageKey, JSON.stringify(matchConfig));
   }, [matchConfig, configStorageKey]);
+
+  // Reload match config when table changes
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(configStorageKey);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        setMatchConfig({
+          ...DEFAULT_MATCH_CONFIG,
+          ...parsed,
+          fields: { ...DEFAULT_MATCH_CONFIG.fields, ...parsed.fields },
+        });
+      } else {
+        setMatchConfig(DEFAULT_MATCH_CONFIG);
+      }
+    } catch (e) {
+      console.warn('Failed to load match config from localStorage:', e);
+      setMatchConfig(DEFAULT_MATCH_CONFIG);
+    }
+  }, [configStorageKey]);
 
   const addLog = useCallback((message, type = 'info') => {
     setLogs(prev => [...prev, { message, type, timestamp: new Date().toLocaleTimeString() }]);
@@ -4263,6 +4284,73 @@ function MainApp({ accessLevel, tableConfig, onLogout, onSwitchTable }) {
         <>
           <div className="card">
             <h2>Airtable Connection</h2>
+
+            {/* Table Selection */}
+            <div className="input-group" style={{ marginBottom: '20px' }}>
+              <label>Select Table to Scan</label>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginTop: '10px' }}>
+                {Object.values(TABLE_CONFIGS).map(table => (
+                  <div
+                    key={table.id}
+                    onClick={() => {
+                      if (!loading && selectedTable !== table.id) {
+                        // Clear data when switching tables
+                        setAllRecords([]);
+                        setCandidates([]);
+                        setSelectedIds(new Set());
+                        setSchema(null);
+                        setLogs([{ message: `Switched to ${table.name}`, type: 'info', timestamp: new Date().toLocaleTimeString() }]);
+                        onSelectTable(table.id);
+                      }
+                    }}
+                    style={{
+                      background: selectedTable === table.id ? 'rgba(99, 102, 241, 0.2)' : 'rgba(30, 41, 59, 0.9)',
+                      border: selectedTable === table.id ? '2px solid #6366f1' : '1px solid #475569',
+                      borderRadius: '12px',
+                      padding: '15px',
+                      cursor: loading ? 'not-allowed' : 'pointer',
+                      transition: 'all 0.2s',
+                      opacity: loading ? 0.6 : 1,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px',
+                    }}
+                    onMouseEnter={e => {
+                      if (!loading) {
+                        e.currentTarget.style.borderColor = '#6366f1';
+                      }
+                    }}
+                    onMouseLeave={e => {
+                      if (selectedTable !== table.id) {
+                        e.currentTarget.style.borderColor = '#475569';
+                      }
+                    }}
+                  >
+                    <div style={{
+                      fontSize: '1.8rem',
+                      lineHeight: 1,
+                      background: 'rgba(99, 102, 241, 0.15)',
+                      borderRadius: '8px',
+                      padding: '8px',
+                    }}>
+                      {table.icon}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ color: '#a5b4fc', fontWeight: 'bold', marginBottom: '3px' }}>
+                        {table.name}
+                      </div>
+                      <div style={{ color: '#94a3b8', fontSize: '0.8em' }}>
+                        {table.description}
+                      </div>
+                    </div>
+                    {selectedTable === table.id && (
+                      <div style={{ color: '#10b981', fontSize: '1.2em' }}>✓</div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
               <div className="input-group">
                 <label>API Key (Personal Access Token)</label>
