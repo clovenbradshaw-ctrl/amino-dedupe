@@ -4074,9 +4074,11 @@ function MainApp({ accessLevel, tableConfig, selectedTable, onSelectTable, onLog
       const filter = isBahrOnly ? '{Bahr Client}' : '';
       addLog(`Fetching ${isBahrOnly ? 'Bahr clients' : 'all records'}...`, 'info');
 
-      // Include history field and Created for filtering
+      // Include history field and date fields for filtering (only if they exist in schema)
       const historyField = tableConfig.historyField || 'dedupe_history';
-      const fieldsToFetch = [...tableSchema.writableFields, historyField, 'Created'].filter((f, i, arr) => arr.indexOf(f) === i);
+      const allSchemaFields = [...tableSchema.writableFields, ...tableSchema.computedFields];
+      const dateFields = ['Created', 'createdTime'].filter(f => allSchemaFields.includes(f));
+      const fieldsToFetch = [...tableSchema.writableFields, historyField, ...dateFields].filter((f, i, arr) => arr.indexOf(f) === i);
 
       // Stream records as they load - update state incrementally
       let allFetchedRecords = [];
