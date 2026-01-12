@@ -4074,9 +4074,11 @@ function MainApp({ accessLevel, tableConfig, selectedTable, onSelectTable, onLog
       const filter = isBahrOnly ? '{Bahr Client}' : '';
       addLog(`Fetching ${isBahrOnly ? 'Bahr clients' : 'all records'}...`, 'info');
 
-      // Include history field and Created for filtering
+      // Include history field and Created for filtering (only if Created field exists)
       const historyField = tableConfig.historyField || 'dedupe_history';
-      const fieldsToFetch = [...tableSchema.writableFields, historyField, 'Created'].filter((f, i, arr) => arr.indexOf(f) === i);
+      const allSchemaFields = [...tableSchema.writableFields, ...tableSchema.computedFields];
+      const createdField = allSchemaFields.includes('Created') ? ['Created'] : [];
+      const fieldsToFetch = [...tableSchema.writableFields, historyField, ...createdField].filter((f, i, arr) => arr.indexOf(f) === i);
 
       // Stream records as they load - update state incrementally
       let allFetchedRecords = [];
@@ -4179,8 +4181,8 @@ function MainApp({ accessLevel, tableConfig, selectedTable, onSelectTable, onLog
     // Filter by Created date
     if (createdDateFrom || createdDateTo) {
       result = result.filter(c => {
-        const survivorCreated = c.survivor.record.fields['Created'] || c.survivor.record.fields['createdTime'];
-        const mergedCreated = c.merged.record.fields['Created'] || c.merged.record.fields['createdTime'];
+        const survivorCreated = c.survivor.record.fields['Created'] || c.survivor.record.createdTime;
+        const mergedCreated = c.merged.record.fields['Created'] || c.merged.record.createdTime;
         // Use the earliest created date between the two records
         const createdDate = survivorCreated || mergedCreated;
         if (!createdDate) return true; // Include if no date
@@ -4493,8 +4495,8 @@ function MainApp({ accessLevel, tableConfig, selectedTable, onSelectTable, onLog
                   </thead>
                   <tbody>
                     {filteredCandidates.map((c, idx) => {
-                      const survivorCreated = c.survivor.record.fields['Created'] || c.survivor.record.fields['createdTime'];
-                      const mergedCreated = c.merged.record.fields['Created'] || c.merged.record.fields['createdTime'];
+                      const survivorCreated = c.survivor.record.fields['Created'] || c.survivor.record.createdTime;
+                      const mergedCreated = c.merged.record.fields['Created'] || c.merged.record.createdTime;
                       const displayDate = survivorCreated || mergedCreated;
                       const isTier4 = c.tier.tier === 4;
 
