@@ -900,13 +900,13 @@ const MATCH_FIELD_DEFINITIONS = {
     id: 'clioId',
     label: 'Clio Contact ID',
     category: 'identity',
-    description: 'Different Clio IDs means records are definitely NOT the same person',
-    defaultEnabled: true,
+    description: 'When blocking: different Clio IDs = definitely not same person. When exact: matching IDs = strong evidence.',
+    defaultEnabled: false,
     defaultType: 'blocking',
     defaultThreshold: 100,
     supportsFuzzy: false,
     badge: 'blocking',
-    isBlocking: true,
+    supportsBlocking: true,
   },
   // Contact Fields
   phone: {
@@ -1003,7 +1003,7 @@ const MATCH_PRESETS = {
       name: { enabled: true, type: 'fuzzy', threshold: 95 },
       ppid: { enabled: true, type: 'exact', threshold: 100 },
       aNumber: { enabled: true, type: 'exact', threshold: 100 },
-      clioId: { enabled: true, type: 'blocking', threshold: 100 },
+      clioId: { enabled: false, type: 'blocking', threshold: 100 },
       phone: { enabled: true, type: 'normalized', threshold: 100 },
       email: { enabled: true, type: 'exact', threshold: 100 },
       dob: { enabled: true, type: 'exact', threshold: 100 },
@@ -1022,7 +1022,7 @@ const MATCH_PRESETS = {
       name: { enabled: true, type: 'fuzzy', threshold: 85 },
       ppid: { enabled: true, type: 'exact', threshold: 100 },
       aNumber: { enabled: true, type: 'exact', threshold: 100 },
-      clioId: { enabled: true, type: 'blocking', threshold: 100 },
+      clioId: { enabled: false, type: 'blocking', threshold: 100 },
       phone: { enabled: true, type: 'normalized', threshold: 100 },
       email: { enabled: true, type: 'exact', threshold: 100 },
       dob: { enabled: true, type: 'exact', threshold: 100 },
@@ -1041,7 +1041,7 @@ const MATCH_PRESETS = {
       name: { enabled: true, type: 'fuzzy', threshold: 70 },
       ppid: { enabled: true, type: 'exact', threshold: 100 },
       aNumber: { enabled: true, type: 'exact', threshold: 100 },
-      clioId: { enabled: true, type: 'blocking', threshold: 100 },
+      clioId: { enabled: false, type: 'blocking', threshold: 100 },
       phone: { enabled: true, type: 'fuzzy', threshold: 90 },
       email: { enabled: true, type: 'fuzzy', threshold: 90 },
       dob: { enabled: true, type: 'exact', threshold: 100 },
@@ -1719,12 +1719,17 @@ const scoreMatch = (recordA, recordB, matchConfig = DEFAULT_MATCH_CONFIG) => {
   let hasIdMatch = false;
   const fieldConfig = matchConfig.fields || {};
 
-  // Handle blocking fields first (like clio_contact_id)
-  const clioConfig = fieldConfig.clioId || { enabled: true, type: 'blocking' };
+  // Handle clio_contact_id field (can be blocking or exact match)
+  const clioConfig = fieldConfig.clioId || { enabled: false, type: 'blocking' };
   if (clioConfig.enabled) {
     const clioA = fa['clio_contact_id'], clioB = fb['clio_contact_id'];
     if (clioA && clioB && clioA !== clioB) {
-      return null; // Definitively not a match
+      // Only block if type is 'blocking', otherwise treat as conflict
+      if (clioConfig.type === 'blocking') {
+        return null; // Definitively not a match
+      } else {
+        conflicts.push(`clio_contact_id: "${clioA}" vs "${clioB}"`);
+      }
     }
     if (clioA && clioB && clioA === clioB) {
       reasons.push('clio_contact_id exact');
@@ -2296,7 +2301,6 @@ function MatchSettingsPanel({ config, onChange, onRescan, allRecords, schema, di
   }, [config.fields]);
 
   const renderFieldRow = (field) => {
-    const isDisabled = field.isBlocking;
     const showThreshold = field.supportsFuzzy && (field.type === 'fuzzy' || field.type === 'normalized');
 
     return (
@@ -2307,13 +2311,13 @@ function MatchSettingsPanel({ config, onChange, onRescan, allRecords, schema, di
             id={`field-${field.id}`}
             checked={field.enabled}
             onChange={() => handleFieldToggle(field.id)}
-            disabled={isDisabled || disabled}
+            disabled={disabled}
           />
           <label htmlFor={`field-${field.id}`}>
             {field.label}
             {field.recommended && <span className="field-badge recommended">Recommended</span>}
             {field.badge === 'id' && <span className="field-badge id">ID</span>}
-            {field.badge === 'blocking' && <span className="field-badge blocking">Blocking</span>}
+            {field.supportsBlocking && field.type === 'blocking' && <span className="field-badge blocking">Blocking</span>}
             {field.badge === 'json' && <span className="field-badge" style={{ background: 'rgba(147, 51, 234, 0.2)', color: '#a78bfa' }}>JSON</span>}
           </label>
           <span className="field-tooltip">
@@ -2327,20 +2331,15 @@ function MatchSettingsPanel({ config, onChange, onRescan, allRecords, schema, di
             className="match-type-select"
             value={field.type}
             onChange={(e) => handleFieldTypeChange(field.id, e.target.value)}
-            disabled={!field.enabled || isDisabled || disabled}
+            disabled={!field.enabled || disabled}
           >
-            {field.isBlocking ? (
-              <option value="blocking">Blocking (if different = no match)</option>
-            ) : (
-              <>
-                <option value="exact">Exact Match</option>
-                {field.supportsFuzzy && <option value="fuzzy">Fuzzy Match</option>}
-                {field.id === 'phone' && <option value="normalized">Normalized</option>}
-              </>
-            )}
+            {field.supportsBlocking && <option value="blocking">Blocking (if different = no match)</option>}
+            <option value="exact">Exact Match</option>
+            {field.supportsFuzzy && <option value="fuzzy">Fuzzy Match</option>}
+            {field.id === 'phone' && <option value="normalized">Normalized</option>}
           </select>
 
-          {showThreshold && field.enabled && !isDisabled && (
+          {showThreshold && field.enabled && (
             <div className="threshold-slider">
               <input
                 type="range"
