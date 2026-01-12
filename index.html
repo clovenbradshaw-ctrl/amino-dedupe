@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Airtable Dedupe - Client Deduplication Tool</title>
+  <title>Airtable Dedupe - Deduplication Tool</title>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -710,6 +710,135 @@ const { useState, useCallback, useEffect, useRef, useMemo } = React;
 
 const AIRTABLE_BASE_ID = 'app1tsUyKa7F3sy0D';
 const CLIENT_INFO_TABLE = 'Client Info';
+const CASE_MASTER_VIEW_TABLE = 'tblgynOzESGvAXAsK'; // Case Master View table ID
+
+// Table configurations - defines which tables are available and their settings
+const TABLE_CONFIGS = {
+  client_info: {
+    id: 'client_info',
+    name: 'Client Info',
+    tableId: CLIENT_INFO_TABLE,
+    description: 'Nashville PP client records with Box folder integration',
+    icon: '👤',
+    flatpackField: null,
+    hasBahrFilter: true,
+    historyField: 'dedupe_history',
+    excludeFromMerge: ['Box Legacy ID'],
+    // Uses the main MATCH_FIELD_DEFINITIONS
+    useMainMatchFields: true,
+  },
+  case_master_view: {
+    id: 'case_master_view',
+    name: 'Case Master View',
+    tableId: CASE_MASTER_VIEW_TABLE,
+    description: 'Case tracking with Clio integration via Matter_Flatpack',
+    icon: '📋',
+    flatpackField: 'Matter_Flatpack',
+    hasBahrFilter: false, // Bahr detection is via matterId in flatpack
+    historyField: 'Matter_Flatpack', // History stored in flatpack as events
+    excludeFromMerge: [],
+    useMainMatchFields: false,
+    // Custom match fields for Case Master View
+    matchFieldDefinitions: {
+      name: {
+        id: 'name',
+        label: 'Name / Client Name',
+        category: 'primary',
+        description: 'Compares Name field and clientName from Matter_Flatpack',
+        airtableFields: ['Name', 'Client Name', 'Defendant Name'],
+        flatpackFields: ['clientName'],
+        defaultEnabled: true,
+        defaultType: 'fuzzy',
+        defaultThreshold: 70,
+        supportsFuzzy: true,
+        recommended: true,
+      },
+      matterId: {
+        id: 'matterId',
+        label: 'Matter ID (Clio)',
+        category: 'identity',
+        description: 'Exact match on Clio Matter ID from flatpack - definitive',
+        flatpackFields: ['matterId'],
+        defaultEnabled: true,
+        defaultType: 'exact',
+        defaultThreshold: 100,
+        supportsFuzzy: false,
+        badge: 'id',
+      },
+      ppid: {
+        id: 'ppid',
+        label: 'PP_ID',
+        category: 'identity',
+        description: 'Nashville PP system ID - exact match is definitive',
+        airtableFields: ['PP_ID'],
+        defaultEnabled: true,
+        defaultType: 'exact',
+        defaultThreshold: 100,
+        supportsFuzzy: false,
+        badge: 'id',
+      },
+      clioId: {
+        id: 'clioId',
+        label: 'Clio_ID / Client_ID',
+        category: 'identity',
+        description: 'Clio client ID fields',
+        airtableFields: ['Clio_ID', 'Client_ID_Airtable'],
+        flatpackFields: ['clientId'],
+        defaultEnabled: true,
+        defaultType: 'exact',
+        defaultThreshold: 100,
+        supportsFuzzy: false,
+        badge: 'id',
+      },
+      phone: {
+        id: 'phone',
+        label: 'Phone',
+        category: 'contact',
+        description: 'Phone number comparison (normalized)',
+        airtableFields: ['Phone'],
+        defaultEnabled: true,
+        defaultType: 'normalized',
+        defaultThreshold: 100,
+        supportsFuzzy: true,
+      },
+      email: {
+        id: 'email',
+        label: 'Email',
+        category: 'contact',
+        description: 'Email address comparison',
+        airtableFields: ['Email'],
+        defaultEnabled: true,
+        defaultType: 'exact',
+        defaultThreshold: 100,
+        supportsFuzzy: true,
+      },
+      dob: {
+        id: 'dob',
+        label: 'DOB',
+        category: 'personal',
+        description: 'Date of birth - strong corroboration',
+        airtableFields: ['DOB'],
+        defaultEnabled: true,
+        defaultType: 'exact',
+        defaultThreshold: 100,
+        supportsFuzzy: false,
+      },
+      address: {
+        id: 'address',
+        label: 'Address',
+        category: 'additional',
+        description: 'Street address comparison',
+        airtableFields: ['Address'],
+        defaultEnabled: false,
+        defaultType: 'fuzzy',
+        defaultThreshold: 80,
+        supportsFuzzy: true,
+      },
+    },
+    // Fields to concatenate on merge
+    concatenateFields: ['Notes', 'Case Notes', 'History'],
+  },
+};
 
 // Password hashes for authentication
 const ALL_CLIENTS_HASH = '66a0dda85ec791a862a57ac9d0ffca6a3aa3310cbe367ff2cd73e29dde2b0abd';
@@ -985,6 +1114,131 @@ const normalizeName = (name) => {
 };
 
 const normalizePhone = (phone) => phone ? phone.replace(/\D/g, '').slice(-10) : '';
+
+// ============================================
+// MATTER_FLATPACK HELPERS (for Case Master View)
+// ============================================
+
+// Parse Matter_Flatpack JSON field into an object
+const parseFlatpack = (record, flatpackFieldName = 'Matter_Flatpack') => {
+  const flatpackData = record?.fields?.[flatpackFieldName];
+  const expanded = { _flatpackKeys: new Set(), _rawEntries: [] };
+
+  if (!flatpackData) return expanded;
+
+  try {
+    const parsed = typeof flatpackData === 'string'
+      ? JSON.parse(flatpackData)
+      : flatpackData;
+
+    // Handle array of entries (append stream)
+    if (Array.isArray(parsed)) {
+      expanded._rawEntries = parsed;
+      // Get latest non-merge entry values
+      const latestValues = {};
+      for (const entry of parsed) {
+        if (entry._dedupe_event) continue; // Skip merge events for display
+        for (const [key, value] of Object.entries(entry)) {
+          if (!key.startsWith('_')) {
+            latestValues[key] = value;
+            expanded._flatpackKeys.add(key);
+          }
+        }
+      }
+      Object.assign(expanded, latestValues);
+    } else if (typeof parsed === 'object') {
+      // Single object
+      for (const [key, value] of Object.entries(parsed)) {
+        if (!key.startsWith('_')) {
+          expanded[key] = value;
+          expanded._flatpackKeys.add(key);
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('Failed to parse flatpack:', e);
+  }
+
+  return expanded;
+};
+
+// Get expanded fields for a record (regular fields + flatpack fields)
+const getExpandedFields = (record, tableConfig) => {
+  const base = { ...record.fields };
+  const flatpackFieldName = tableConfig?.flatpackField;
+
+  if (!flatpackFieldName) {
+    return { fields: base, flatpackKeys: new Set() };
+  }
+
+  const flatpack = parseFlatpack(record, flatpackFieldName);
+  const flatpackKeys = flatpack._flatpackKeys;
+  delete flatpack._flatpackKeys;
+  delete flatpack._rawEntries;
+
+  // Add flatpack fields with prefix indicator
+  for (const [key, value] of Object.entries(flatpack)) {
+    base[`⬡ ${key}`] = value;
+  }
+
+  return { fields: base, flatpackKeys };
+};
+
+// Get merge history from Matter_Flatpack
+const getMergeHistoryFromFlatpack = (record, flatpackFieldName = 'Matter_Flatpack') => {
+  const flatpack = parseFlatpack(record, flatpackFieldName);
+  const rawEntries = flatpack._rawEntries || [];
+  return rawEntries.filter(entry => entry._dedupe_event);
+};
+
+// Check if a record has matterId (Bahr client in Case Master View)
+const hasMatterId = (record, tableConfig) => {
+  if (!tableConfig?.flatpackField) return false;
+  const flatpack = parseFlatpack(record, tableConfig.flatpackField);
+  return !!flatpack.matterId;
+};
+
+// Get matterId from flatpack
+const getMatterId = (record, tableConfig) => {
+  if (!tableConfig?.flatpackField) return null;
+  const flatpack = parseFlatpack(record, tableConfig.flatpackField);
+  return flatpack.matterId || null;
+};
+
+// Build merge event for flatpack append stream
+const buildFlatpackMergeEvent = (survivor, merged, fieldDecisions, confidence, reasons) => {
+  return {
+    _dedupe_event: 'merge',
+    _merge_id: `mrg_${Date.now().toString(36)}`,
+    _timestamp: new Date().toISOString(),
+    _confidence: confidence,
+    _match_reasons: reasons,
+    _survivor_record_id: survivor.id,
+    _merged_record: {
+      record_id: merged.id,
+      fields_snapshot: { ...merged.fields },
+    },
+    _field_decisions: fieldDecisions,
+  };
+};
+
+// Append to flatpack array without losing data
+const appendToFlatpack = (existingFlatpack, newEntry) => {
+  let entries = [];
+  try {
+    if (existingFlatpack) {
+      const parsed = typeof existingFlatpack === 'string'
+        ? JSON.parse(existingFlatpack)
+        : existingFlatpack;
+      entries = Array.isArray(parsed) ? parsed : [parsed];
+    }
+  } catch (e) {
+    console.warn('Failed to parse existing flatpack:', e);
+  }
+
+  entries.push(newEntry);
+  return JSON.stringify(entries, null, 2);
+};
 
 const levenshteinDistance = (a, b) => {
   if (!a || !b) return Math.max((a||'').length, (b||'').length);
@@ -2313,7 +2567,7 @@ function LoginScreen({ onLogin }) {
     <div className="container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
       <div className="card" style={{ maxWidth: '400px', width: '100%' }}>
         <h1 style={{ textAlign: 'center' }}>Airtable Dedupe</h1>
-        <p className="subtitle" style={{ textAlign: 'center' }}>Client Deduplication Tool</p>
+        <p className="subtitle" style={{ textAlign: 'center' }}>Deduplication Tool</p>
         <form onSubmit={handleSubmit}>
           <div className="input-group">
             <label>Password</label>
@@ -2324,6 +2578,111 @@ function LoginScreen({ onLogin }) {
             {loading ? 'Verifying...' : 'Login'}
           </button>
         </form>
+      </div>
+    </div>
+  );
+}
+
+// ============================================
+// TABLE SELECTOR COMPONENT
+// ============================================
+
+function TableSelector({ onSelectTable, onBack }) {
+  const tableOptions = Object.values(TABLE_CONFIGS);
+
+  return (
+    <div className="container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
+      <div className="card" style={{ maxWidth: '600px', width: '100%' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+          <button className="secondary small" onClick={onBack}>
+            ← Back
+          </button>
+          <div></div>
+        </div>
+        <h1 style={{ textAlign: 'center', marginBottom: '10px' }}>Select Table</h1>
+        <p className="subtitle" style={{ textAlign: 'center', marginBottom: '30px' }}>
+          Choose which Airtable table to scan for duplicates
+        </p>
+
+        <div style={{ display: 'grid', gap: '15px' }}>
+          {tableOptions.map(table => (
+            <div
+              key={table.id}
+              onClick={() => onSelectTable(table.id)}
+              style={{
+                background: 'rgba(30, 41, 59, 0.9)',
+                border: '1px solid #475569',
+                borderRadius: '12px',
+                padding: '20px',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '15px',
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.borderColor = '#6366f1';
+                e.currentTarget.style.transform = 'translateY(-2px)';
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.borderColor = '#475569';
+                e.currentTarget.style.transform = 'translateY(0)';
+              }}
+            >
+              <div style={{
+                fontSize: '2.5rem',
+                lineHeight: 1,
+                background: 'rgba(99, 102, 241, 0.15)',
+                borderRadius: '12px',
+                padding: '12px',
+              }}>
+                {table.icon}
+              </div>
+              <div style={{ flex: 1 }}>
+                <h3 style={{ color: '#a5b4fc', marginBottom: '5px', fontSize: '1.1em' }}>
+                  {table.name}
+                </h3>
+                <p style={{ color: '#94a3b8', fontSize: '0.9em', marginBottom: '10px' }}>
+                  {table.description}
+                </p>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  {table.flatpackField && (
+                    <span style={{
+                      fontSize: '0.7em',
+                      background: 'rgba(168, 85, 247, 0.2)',
+                      color: '#a855f7',
+                      padding: '3px 8px',
+                      borderRadius: '4px',
+                    }}>
+                      Matter_Flatpack
+                    </span>
+                  )}
+                  {table.hasBahrFilter && (
+                    <span style={{
+                      fontSize: '0.7em',
+                      background: 'rgba(16, 185, 129, 0.2)',
+                      color: '#10b981',
+                      padding: '3px 8px',
+                      borderRadius: '4px',
+                    }}>
+                      Bahr Filter
+                    </span>
+                  )}
+                  <span style={{
+                    fontSize: '0.7em',
+                    background: 'rgba(59, 130, 246, 0.2)',
+                    color: '#3b82f6',
+                    padding: '3px 8px',
+                    borderRadius: '4px',
+                  }}>
+                    {table.tableId.length > 15 ? `${table.tableId.slice(0, 15)}...` : table.tableId}
+                  </span>
+                </div>
+              </div>
+              <div style={{ color: '#64748b', fontSize: '1.5em' }}>→</div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -3539,17 +3898,49 @@ function BulkMergeModal({ selectedCandidates, schema, credentials, onComplete, o
 
 function App() {
   const [accessLevel, setAccessLevel] = useState(() => sessionStorage.getItem('access_level') || null);
+  const [selectedTable, setSelectedTable] = useState(() => sessionStorage.getItem('selected_table') || null);
 
   const handleLogin = (level) => {
     setAccessLevel(level);
     sessionStorage.setItem('access_level', level);
   };
 
+  const handleSelectTable = (tableId) => {
+    setSelectedTable(tableId);
+    sessionStorage.setItem('selected_table', tableId);
+  };
+
+  const handleLogout = () => {
+    setAccessLevel(null);
+    setSelectedTable(null);
+    sessionStorage.removeItem('access_level');
+    sessionStorage.removeItem('selected_table');
+  };
+
+  const handleBackToTableSelect = () => {
+    setSelectedTable(null);
+    sessionStorage.removeItem('selected_table');
+  };
+
+  // Step 1: Login
   if (!accessLevel) return <LoginScreen onLogin={handleLogin} />;
-  return <MainApp accessLevel={accessLevel} onLogout={() => { setAccessLevel(null); sessionStorage.removeItem('access_level'); }} />;
+
+  // Step 2: Table Selection
+  if (!selectedTable) return <TableSelector onSelectTable={handleSelectTable} onBack={handleLogout} />;
+
+  // Step 3: Main App with selected table
+  const tableConfig = TABLE_CONFIGS[selectedTable];
+  return (
+    <MainApp
+      accessLevel={accessLevel}
+      tableConfig={tableConfig}
+      onLogout={handleLogout}
+      onSwitchTable={handleBackToTableSelect}
+    />
+  );
 }
 
-function MainApp({ accessLevel, onLogout }) {
+function MainApp({ accessLevel, tableConfig, onLogout, onSwitchTable }) {
   const [apiKey, setApiKey] = useState(() => localStorage.getItem('airtable_api_key') || '');
   const [baseId, setBaseId] = useState(AIRTABLE_BASE_ID);
   const [loading, setLoading] = useState(false);
@@ -3570,10 +3961,15 @@ function MainApp({ accessLevel, onLogout }) {
   const [lastSelectedIndex, setLastSelectedIndex] = useState(null);
   const [showBulkMergeModal, setShowBulkMergeModal] = useState(false);
 
-  // Match configuration state with localStorage persistence
+  // Table-specific values
+  const tableName = tableConfig.tableId;
+  const hasBahrFilter = tableConfig.hasBahrFilter;
+
+  // Match configuration state with localStorage persistence (per-table)
+  const configStorageKey = `dedupe_match_config_${tableConfig.id}`;
   const [matchConfig, setMatchConfig] = useState(() => {
     try {
-      const saved = localStorage.getItem('dedupe_match_config');
+      const saved = localStorage.getItem(configStorageKey);
       if (saved) {
         const parsed = JSON.parse(saved);
         // Merge saved config with defaults to handle any new fields
@@ -3590,16 +3986,16 @@ function MainApp({ accessLevel, onLogout }) {
   });
 
   const logRef = useRef(null);
-  const isBahrOnly = accessLevel === 'bahr';
-  const credentials = { apiKey, baseId, tableName: CLIENT_INFO_TABLE };
+  const isBahrOnly = accessLevel === 'bahr' && hasBahrFilter;
+  const credentials = { apiKey, baseId, tableName, tableConfig };
 
   useEffect(() => { if (apiKey) localStorage.setItem('airtable_api_key', apiKey); }, [apiKey]);
   useEffect(() => { if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight; }, [logs]);
 
-  // Persist match config to localStorage
+  // Persist match config to localStorage (per-table)
   useEffect(() => {
-    localStorage.setItem('dedupe_match_config', JSON.stringify(matchConfig));
-  }, [matchConfig]);
+    localStorage.setItem(configStorageKey, JSON.stringify(matchConfig));
+  }, [matchConfig, configStorageKey]);
 
   const addLog = useCallback((message, type = 'info') => {
     setLogs(prev => [...prev, { message, type, timestamp: new Date().toLocaleTimeString() }]);
@@ -3649,20 +4045,21 @@ function MainApp({ accessLevel, onLogout }) {
     try {
       const client = new AirtableClient(apiKey, baseId);
 
-      addLog('Fetching table schema...', 'info');
-      const tableSchema = await client.getTableSchema(CLIENT_INFO_TABLE);
+      addLog(`Fetching schema for ${tableConfig.name}...`, 'info');
+      const tableSchema = await client.getTableSchema(tableName);
       setSchema(tableSchema);
       addLog(`Schema: ${tableSchema.writableFields.length} writable, ${tableSchema.computedFields.length} computed fields`, 'success');
 
       const filter = isBahrOnly ? '{Bahr Client}' : '';
-      addLog(`Fetching ${isBahrOnly ? 'Bahr clients' : 'all clients'}...`, 'info');
+      addLog(`Fetching ${isBahrOnly ? 'Bahr clients' : 'all records'}...`, 'info');
 
-      // Include Created field for filtering (it's a computed field)
-      const fieldsToFetch = [...tableSchema.writableFields, 'dedupe_history', 'Created'];
+      // Include history field and Created for filtering
+      const historyField = tableConfig.historyField || 'dedupe_history';
+      const fieldsToFetch = [...tableSchema.writableFields, historyField, 'Created'].filter((f, i, arr) => arr.indexOf(f) === i);
 
       // Stream records as they load - update state incrementally
       let allFetchedRecords = [];
-      const records = await client.getAllRecords(CLIENT_INFO_TABLE, fieldsToFetch, filter,
+      const records = await client.getAllRecords(tableName, fieldsToFetch, filter,
         (p) => {
           addLog(`Page ${p.page}: ${p.total} records loaded`, 'info');
           // Update allRecords incrementally to show progress
@@ -3814,13 +4211,41 @@ function MainApp({ accessLevel, onLogout }) {
     <div className="container">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '10px', marginBottom: '20px' }}>
         <div>
-          <h1>Airtable Dedupe</h1>
-          <p className="subtitle">Client Deduplication with Tiered Matching</p>
+          <h1 style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <span style={{ fontSize: '1.2em' }}>{tableConfig.icon}</span>
+            Airtable Dedupe
+          </h1>
+          <p className="subtitle" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{
+              background: 'rgba(99, 102, 241, 0.2)',
+              color: '#a5b4fc',
+              padding: '3px 10px',
+              borderRadius: '4px',
+              fontSize: '0.9em',
+            }}>
+              {tableConfig.name}
+            </span>
+            Deduplication with Tiered Matching
+          </p>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <span style={{ background: isBahrOnly ? '#6366f1' : '#10b981', color: 'white', padding: '6px 12px', borderRadius: '6px', fontSize: '0.85em' }}>
-            {isBahrOnly ? 'Bahr Clients' : 'All Clients'}
-          </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          {hasBahrFilter && (
+            <span style={{ background: isBahrOnly ? '#6366f1' : '#10b981', color: 'white', padding: '6px 12px', borderRadius: '6px', fontSize: '0.85em' }}>
+              {isBahrOnly ? 'Bahr Clients' : 'All Clients'}
+            </span>
+          )}
+          {tableConfig.flatpackField && (
+            <span style={{
+              background: 'rgba(168, 85, 247, 0.2)',
+              color: '#a855f7',
+              padding: '6px 12px',
+              borderRadius: '6px',
+              fontSize: '0.85em',
+            }}>
+              {tableConfig.flatpackField}
+            </span>
+          )}
+          <button onClick={onSwitchTable} className="secondary small">Switch Table</button>
           <button onClick={onLogout} className="secondary small">Logout</button>
         </div>
       </div>
@@ -3913,11 +4338,13 @@ function MainApp({ accessLevel, onLogout }) {
                   <option value="3">Tier 3 - Possible</option>
                   <option value="4">Tier 4 - Conflicts</option>
                 </select>
-                <select value={bahrFilter} onChange={e => setBahrFilter(e.target.value)}>
-                  <option value="all">All Clients</option>
-                  <option value="yes">Bahr Client = T Only</option>
-                  <option value="no">Non-Bahr Clients Only</option>
-                </select>
+                {hasBahrFilter && (
+                  <select value={bahrFilter} onChange={e => setBahrFilter(e.target.value)}>
+                    <option value="all">All Clients</option>
+                    <option value="yes">Bahr Client = T Only</option>
+                    <option value="no">Non-Bahr Clients Only</option>
+                  </select>
+                )}
                 <input type="text" value={searchFilter} onChange={e => setSearchFilter(e.target.value)} placeholder="Search by name or ID..." />
               </div>
 
