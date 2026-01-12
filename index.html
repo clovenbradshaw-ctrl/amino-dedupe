@@ -1583,10 +1583,10 @@ class AirtableClient {
     return response.json();
   }
 
-  async getTableSchema(tableName) {
+  async getTableSchema(tableNameOrId) {
     const result = await this.request(this.metaUrl);
-    const table = result.tables.find(t => t.name === tableName);
-    if (!table) throw new Error(`Table "${tableName}" not found`);
+    const table = result.tables.find(t => t.name === tableNameOrId || t.id === tableNameOrId);
+    if (!table) throw new Error(`Table "${tableNameOrId}" not found`);
 
     const computedTypes = ['formula', 'rollup', 'count', 'lookup', 'multipleLookupValues', 'autoNumber', 'createdTime', 'lastModifiedTime', 'createdBy', 'lastModifiedBy', 'button'];
     const schema = { writableFields: [], computedFields: [], linkFields: [], textFields: [] };
