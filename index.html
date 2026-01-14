@@ -744,9 +744,9 @@ const TABLE_CONFIGS = {
         id: 'name',
         label: 'Name / Client Name',
         category: 'primary',
-        description: 'Compares Name field and clientName from Matter_Flatpack',
-        airtableFields: ['Name', 'Client Name', 'Defendant Name'],
-        nameFields: { full: 'Name', alt: ['Client Name', 'Defendant Name'] },
+        description: 'Compares Client Name field for duplicate detection',
+        airtableFields: ['Client Name', 'Name', 'Defendant Name'],
+        nameFields: { full: 'Client Name', alt: ['Name', 'Defendant Name'] },
         flatpackFields: ['clientName'],
         defaultEnabled: true,
         defaultType: 'fuzzy',
@@ -1162,6 +1162,14 @@ const getRecordName = (record, fieldDefs) => {
   if (nameDef?.airtableFields) {
     for (const fieldName of nameDef.airtableFields) {
       if (f[fieldName]) return f[fieldName];
+    }
+  }
+
+  // Try flatpack fields as additional fallback (for Case Master View)
+  if (nameDef?.flatpackFields) {
+    const flatpack = parseFlatpack(record);
+    for (const flatpackKey of nameDef.flatpackFields) {
+      if (flatpack[flatpackKey]) return flatpack[flatpackKey];
     }
   }
 
@@ -2124,13 +2132,31 @@ const findDuplicateCandidates = (records, onProgress, matchConfig = DEFAULT_MATC
 
   // Group by normalized name for efficiency - use table-specific name fields
   const groups = new Map();
+  let skippedNoName = 0;
   records.forEach((record, idx) => {
     const name = getRecordName(record, fieldDefs);
     const key = normalizeName(name);
-    if (!key) return;
+    if (!key) {
+      skippedNoName++;
+      return;
+    }
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push({ record, idx });
   });
+
+  // Report grouping stats for debugging
+  const groupsWithDupes = [...groups.values()].filter(g => g.length >= 2).length;
+  const largestGroup = Math.max(0, ...[...groups.values()].map(g => g.length));
+  if (onProgress) {
+    onProgress({
+      phase: 'grouping',
+      totalRecords: records.length,
+      skippedNoName,
+      uniqueNames: groups.size,
+      groupsWithDupes,
+      largestGroup
+    });
+  }
 
   let groupNum = 0;
   groups.forEach((group, key) => {
@@ -4239,7 +4265,13 @@ function MainApp({ accessLevel, tableConfig, selectedTable, onSelectTable, onLog
     setTimeout(() => {
       try {
         const dupes = findDuplicateCandidates(allRecords, (p) => {
-          if (p.current % 100 === 0) addLog(`Matching: ${p.current}/${p.total} groups`, 'info');
+          if (p.phase === 'grouping') {
+            addLog(`Grouping: ${p.totalRecords} records → ${p.uniqueNames} unique names`, 'info');
+            if (p.skippedNoName > 0) addLog(`  Skipped ${p.skippedNoName} records with no name`, 'warning');
+            addLog(`  ${p.groupsWithDupes} names have 2+ records (largest: ${p.largestGroup})`, p.groupsWithDupes > 0 ? 'info' : 'warning');
+          } else if (p.current % 100 === 0) {
+            addLog(`Matching: ${p.current}/${p.total} groups`, 'info');
+          }
         }, matchConfig, fieldDefs);
 
         setCandidates(dupes);
@@ -4301,7 +4333,13 @@ function MainApp({ accessLevel, tableConfig, selectedTable, onSelectTable, onLog
 
       addLog('Analyzing for duplicates...', 'info');
       const dupes = findDuplicateCandidates(records, (p) => {
-        if (p.current % 100 === 0) addLog(`Matching: ${p.current}/${p.total} groups`, 'info');
+        if (p.phase === 'grouping') {
+          addLog(`Grouping: ${p.totalRecords} records → ${p.uniqueNames} unique names`, 'info');
+          if (p.skippedNoName > 0) addLog(`  Skipped ${p.skippedNoName} records with no name`, 'warning');
+          addLog(`  ${p.groupsWithDupes} names have 2+ records (largest: ${p.largestGroup})`, p.groupsWithDupes > 0 ? 'info' : 'warning');
+        } else if (p.current % 100 === 0) {
+          addLog(`Matching: ${p.current}/${p.total} groups`, 'info');
+        }
       }, matchConfig, fieldDefs);
       setCandidates(dupes);
 
