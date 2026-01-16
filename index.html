@@ -4186,6 +4186,7 @@ function MainApp({ accessLevel, tableConfig, selectedTable, onSelectTable, onLog
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [lastSelectedIndex, setLastSelectedIndex] = useState(null);
   const [showBulkMergeModal, setShowBulkMergeModal] = useState(false);
+  const [showColumnSelector, setShowColumnSelector] = useState(false);
 
   // Table-specific values
   const tableName = tableConfig.tableId;
@@ -4246,6 +4247,136 @@ function MainApp({ accessLevel, tableConfig, selectedTable, onSelectTable, onLog
       setMatchConfig(tableDefaultConfig);
     }
   }, [configStorageKey, tableDefaultConfig]);
+
+  // Column definitions for the results table
+  const availableColumns = useMemo(() => {
+    const fieldDefs = getFieldDefinitions(tableConfig);
+    const baseColumns = [
+      { id: 'confidence', label: 'Confidence', defaultVisible: true, fixed: false },
+      { id: 'created', label: 'Created', defaultVisible: true, fixed: false },
+      { id: 'keepRecord', label: 'Keep (Record A)', defaultVisible: true, fixed: false },
+      { id: 'mergeRecord', label: 'Merge (Record B)', defaultVisible: true, fixed: false },
+      { id: 'matchReasons', label: 'Match Reasons', defaultVisible: true, fixed: false },
+    ];
+
+    // Add Bahr Client column if applicable
+    if (hasBahrFilter) {
+      baseColumns.splice(1, 0, { id: 'bahrClient', label: 'Bahr Client', defaultVisible: true, fixed: false });
+    }
+
+    // Add dynamic columns based on field definitions
+    const dynamicColumns = [];
+    Object.values(fieldDefs).forEach(field => {
+      const airtableField = field.airtableFields?.[0] || field.airtableField;
+      if (airtableField && !['Client Name', 'Name', 'Defendant Name', 'First Name', 'Family Name'].includes(airtableField)) {
+        dynamicColumns.push({
+          id: `field_${field.id}`,
+          label: field.label,
+          defaultVisible: false,
+          fixed: false,
+          airtableFields: field.airtableFields || [airtableField],
+          flatpackFields: field.flatpackFields,
+        });
+      }
+    });
+
+    return [...baseColumns, ...dynamicColumns];
+  }, [tableConfig, hasBahrFilter]);
+
+  // Column visibility state with localStorage persistence (per-table)
+  const columnStorageKey = `dedupe_columns_${tableConfig.id}`;
+  const [visibleColumns, setVisibleColumns] = useState(() => {
+    try {
+      const saved = localStorage.getItem(columnStorageKey);
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    } catch (e) {
+      console.warn('Failed to load column visibility from localStorage:', e);
+    }
+    // Return default visible columns
+    return availableColumns.filter(col => col.defaultVisible).map(col => col.id);
+  });
+
+  // Persist column visibility to localStorage
+  useEffect(() => {
+    localStorage.setItem(columnStorageKey, JSON.stringify(visibleColumns));
+  }, [visibleColumns, columnStorageKey]);
+
+  // Reload column visibility when table changes
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(columnStorageKey);
+      if (saved) {
+        setVisibleColumns(JSON.parse(saved));
+      } else {
+        setVisibleColumns(availableColumns.filter(col => col.defaultVisible).map(col => col.id));
+      }
+    } catch (e) {
+      console.warn('Failed to load column visibility from localStorage:', e);
+      setVisibleColumns(availableColumns.filter(col => col.defaultVisible).map(col => col.id));
+    }
+  }, [columnStorageKey]);
+
+  const toggleColumn = (columnId) => {
+    setVisibleColumns(prev => {
+      if (prev.includes(columnId)) {
+        return prev.filter(id => id !== columnId);
+      } else {
+        return [...prev, columnId];
+      }
+    });
+  };
+
+  const resetColumnsToDefault = () => {
+    setVisibleColumns(availableColumns.filter(col => col.defaultVisible).map(col => col.id));
+  };
+
+  // Helper to get field value from record
+  const getFieldValue = (record, column) => {
+    if (!column.airtableFields && !column.flatpackFields) return null;
+
+    // Try airtable fields first
+    if (column.airtableFields) {
+      for (const field of column.airtableFields) {
+        const value = record.fields[field];
+        if (value !== undefined && value !== null && value !== '') return value;
+      }
+    }
+
+    // Try flatpack fields
+    if (column.flatpackFields) {
+      const flatpackField = tableConfig.flatpackField;
+      const flatpack = record.fields[flatpackField];
+      if (flatpack) {
+        try {
+          const parsed = typeof flatpack === 'string' ? JSON.parse(flatpack) : flatpack;
+          for (const field of column.flatpackFields) {
+            const value = parsed[field];
+            if (value !== undefined && value !== null && value !== '') return value;
+          }
+        } catch (e) {}
+      }
+    }
+
+    return null;
+  };
+
+  // Click outside handler for column selector
+  const columnSelectorRef = useRef(null);
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (columnSelectorRef.current && !columnSelectorRef.current.contains(event.target)) {
+        setShowColumnSelector(false);
+      }
+    };
+    if (showColumnSelector) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showColumnSelector]);
 
   const addLog = useCallback((message, type = 'info') => {
     setLogs(prev => [...prev, { message, type, timestamp: new Date().toLocaleTimeString() }]);
@@ -4708,6 +4839,68 @@ function MainApp({ accessLevel, tableConfig, selectedTable, onSelectTable, onLog
                     Clear Dates
                   </button>
                 )}
+                {/* Column Selector */}
+                <div ref={columnSelectorRef} style={{ position: 'relative', marginLeft: 'auto' }}>
+                  <button
+                    className="secondary small"
+                    onClick={() => setShowColumnSelector(!showColumnSelector)}
+                    style={{ display: 'flex', alignItems: 'center', gap: '4px' }}
+                  >
+                    Columns ({visibleColumns.length})
+                  </button>
+                  {showColumnSelector && (
+                    <div style={{
+                      position: 'absolute',
+                      top: '100%',
+                      right: 0,
+                      marginTop: '4px',
+                      background: '#1e293b',
+                      border: '1px solid #334155',
+                      borderRadius: '8px',
+                      padding: '12px',
+                      minWidth: '220px',
+                      zIndex: 1000,
+                      boxShadow: '0 4px 20px rgba(0,0,0,0.3)'
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', borderBottom: '1px solid #334155', paddingBottom: '8px' }}>
+                        <span style={{ fontWeight: '600', color: '#e2e8f0' }}>Show Columns</span>
+                        <button
+                          className="secondary small"
+                          onClick={resetColumnsToDefault}
+                          style={{ fontSize: '0.75em', padding: '2px 8px' }}
+                        >
+                          Reset
+                        </button>
+                      </div>
+                      <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                        {availableColumns.map(col => (
+                          <label
+                            key={col.id}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px',
+                              padding: '6px 4px',
+                              cursor: 'pointer',
+                              borderRadius: '4px',
+                              transition: 'background 0.2s'
+                            }}
+                            onMouseEnter={e => e.currentTarget.style.background = '#334155'}
+                            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={visibleColumns.includes(col.id)}
+                              onChange={() => toggleColumn(col.id)}
+                              style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                            />
+                            <span style={{ color: '#e2e8f0', fontSize: '0.9em' }}>{col.label}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div style={{ fontSize: '0.85em', color: '#94a3b8', marginBottom: '10px' }}>
@@ -4726,12 +4919,9 @@ function MainApp({ accessLevel, tableConfig, selectedTable, onSelectTable, onLog
                           title="Select all"
                         />
                       </th>
-                      <th>Confidence</th>
-                      <th>Bahr Client</th>
-                      <th>Created</th>
-                      <th>Keep (Record A)</th>
-                      <th>Merge (Record B)</th>
-                      <th>Match Reasons</th>
+                      {availableColumns.filter(col => visibleColumns.includes(col.id)).map(col => (
+                        <th key={col.id}>{col.label}</th>
+                      ))}
                       <th>Action</th>
                     </tr>
                   </thead>
@@ -4741,6 +4931,75 @@ function MainApp({ accessLevel, tableConfig, selectedTable, onSelectTable, onLog
                       const mergedCreated = c.merged.record.fields['Created'] || c.merged.record.fields['createdTime'];
                       const displayDate = survivorCreated || mergedCreated;
                       const isTier4 = c.tier.tier === 4;
+
+                      // Helper to render cell content based on column type
+                      const renderCell = (col) => {
+                        switch (col.id) {
+                          case 'confidence':
+                            return (
+                              <>
+                                <span className={`badge tier${c.tier.tier}`}>{c.confidence}%</span>
+                                <div style={{ fontSize: '0.75em', color: '#94a3b8' }}>{c.tier.name}</div>
+                              </>
+                            );
+                          case 'bahrClient':
+                            return (c.survivor.record.fields['Bahr Client'] || c.merged.record.fields['Bahr Client']) ? (
+                              <span style={{ background: '#6366f1', color: 'white', padding: '2px 8px', borderRadius: '4px', fontSize: '0.8em' }}>Yes</span>
+                            ) : (
+                              <span style={{ color: '#64748b', fontSize: '0.8em' }}>No</span>
+                            );
+                          case 'created':
+                            return displayDate ? (
+                              <span style={{ fontSize: '0.8em', color: '#94a3b8' }}>
+                                {new Date(displayDate).toLocaleDateString()}
+                              </span>
+                            ) : (
+                              <span style={{ color: '#64748b', fontSize: '0.8em' }}>-</span>
+                            );
+                          case 'keepRecord':
+                            return (
+                              <>
+                                <div style={{ fontWeight: '500' }}>{c.survivor.name}</div>
+                                <div style={{ fontSize: '0.75em', color: '#94a3b8' }}>Score: {c.survivor.score}</div>
+                              </>
+                            );
+                          case 'mergeRecord':
+                            return (
+                              <>
+                                <div>{c.merged.name}</div>
+                                <div style={{ fontSize: '0.75em', color: '#94a3b8' }}>Score: {c.merged.score}</div>
+                              </>
+                            );
+                          case 'matchReasons':
+                            return (
+                              <>
+                                {c.reasons.slice(0, 2).map((r, i) => <span key={i} className="reason-tag">{r}</span>)}
+                                {c.reasons.length > 2 && <span className="reason-tag">+{c.reasons.length - 2}</span>}
+                                {c.conflicts?.map((cf, i) => <span key={i} className="reason-tag conflict">{cf}</span>)}
+                              </>
+                            );
+                          default:
+                            // Handle dynamic field columns
+                            if (col.id.startsWith('field_')) {
+                              const survivorVal = getFieldValue(c.survivor.record, col);
+                              const mergedVal = getFieldValue(c.merged.record, col);
+                              const displayVal = survivorVal || mergedVal;
+                              if (!displayVal) {
+                                return <span style={{ color: '#64748b', fontSize: '0.8em' }}>-</span>;
+                              }
+                              // Format display based on value type
+                              if (typeof displayVal === 'string' && displayVal.match(/^\d{4}-\d{2}-\d{2}/)) {
+                                return <span style={{ fontSize: '0.8em', color: '#94a3b8' }}>{new Date(displayVal).toLocaleDateString()}</span>;
+                              }
+                              return (
+                                <div style={{ fontSize: '0.85em', maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={String(displayVal)}>
+                                  {String(displayVal)}
+                                </div>
+                              );
+                            }
+                            return null;
+                        }
+                      };
 
                       return (
                         <tr
@@ -4761,39 +5020,11 @@ function MainApp({ accessLevel, tableConfig, selectedTable, onSelectTable, onLog
                               title={isTier4 ? "Tier 4 conflicts must be reviewed individually" : "Select for bulk merge"}
                             />
                           </td>
-                          <td onClick={() => setSelectedCandidate(c)}>
-                            <span className={`badge tier${c.tier.tier}`}>{c.confidence}%</span>
-                            <div style={{ fontSize: '0.75em', color: '#94a3b8' }}>{c.tier.name}</div>
-                          </td>
-                          <td onClick={() => setSelectedCandidate(c)}>
-                            {(c.survivor.record.fields['Bahr Client'] || c.merged.record.fields['Bahr Client']) ? (
-                              <span style={{ background: '#6366f1', color: 'white', padding: '2px 8px', borderRadius: '4px', fontSize: '0.8em' }}>Yes</span>
-                            ) : (
-                              <span style={{ color: '#64748b', fontSize: '0.8em' }}>No</span>
-                            )}
-                          </td>
-                          <td onClick={() => setSelectedCandidate(c)}>
-                            {displayDate ? (
-                              <span style={{ fontSize: '0.8em', color: '#94a3b8' }}>
-                                {new Date(displayDate).toLocaleDateString()}
-                              </span>
-                            ) : (
-                              <span style={{ color: '#64748b', fontSize: '0.8em' }}>-</span>
-                            )}
-                          </td>
-                          <td onClick={() => setSelectedCandidate(c)}>
-                            <div style={{ fontWeight: '500' }}>{c.survivor.name}</div>
-                            <div style={{ fontSize: '0.75em', color: '#94a3b8' }}>Score: {c.survivor.score}</div>
-                          </td>
-                          <td onClick={() => setSelectedCandidate(c)}>
-                            <div>{c.merged.name}</div>
-                            <div style={{ fontSize: '0.75em', color: '#94a3b8' }}>Score: {c.merged.score}</div>
-                          </td>
-                          <td onClick={() => setSelectedCandidate(c)}>
-                            {c.reasons.slice(0, 2).map((r, i) => <span key={i} className="reason-tag">{r}</span>)}
-                            {c.reasons.length > 2 && <span className="reason-tag">+{c.reasons.length - 2}</span>}
-                            {c.conflicts?.map((cf, i) => <span key={i} className="reason-tag conflict">{cf}</span>)}
-                          </td>
+                          {availableColumns.filter(col => visibleColumns.includes(col.id)).map(col => (
+                            <td key={col.id} onClick={() => setSelectedCandidate(c)}>
+                              {renderCell(col)}
+                            </td>
+                          ))}
                           <td><button className="primary small" onClick={() => setSelectedCandidate(c)}>Review</button></td>
                         </tr>
                       );
